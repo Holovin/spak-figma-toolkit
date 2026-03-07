@@ -1,5 +1,6 @@
 # Figma Icon Importer
-<img width="442" height="562" alt="image" src="https://github.com/user-attachments/assets/9c19e370-8af5-4e79-bffb-7cd5f8d48f46" />
+<img width="517" height="626" alt="image" src="https://github.com/user-attachments/assets/37ca3f49-abe1-4805-969d-9607ca3cc546" />
+
 
 Plugin for bulk importing .png icons into Figma as components with properties (theme & state). The plugin was built for very specific purposes, but you can likely adapt it for your own needs.
 
