@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <style>
     * {
@@ -7,7 +7,7 @@
       margin: 0;
       padding: 0;
     }
-
+    
     body {
       font-family: Inter, system-ui, sans-serif;
       font-size: 12px;
@@ -17,7 +17,7 @@
       gap: 12px;
       height: 100vh;
     }
-
+    
     button {
       background: #18a0fb;
       color: white;
@@ -28,25 +28,61 @@
       font-weight: 500;
       cursor: pointer;
     }
-
+    
     button:hover {
       background: #0d8de5;
     }
-
+    
     button.cancel {
       background: #f24822;
     }
-
+    
     button.cancel:hover {
       background: #d93d1a;
     }
-
+    
     button:disabled {
       background: #ccc;
       cursor: not-allowed;
     }
 
+    button.confirm {
+      background: #1a9645;
+    }
+
+    button.confirm:hover {
+      background: #157a38;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-row button:first-child {
+      flex: 1;
+    }
+
+    #secondaryBtn {
+      background: transparent;
+      color: #999;
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      white-space: nowrap;
+    }
+
+    #secondaryBtn:hover {
+      background: #f5f5f5;
+      color: #333;
+    }
+    
     .settings {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .settings-row {
       display: flex;
       gap: 12px;
       align-items: center;
@@ -59,107 +95,332 @@
       color: #333;
     }
 
-    .settings input {
-      width: 40px;
+    .settings input[type="text"] {
+      width: 60px;
       padding: 6px 8px;
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 12px;
       text-align: center;
     }
+    
+    .log-container {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
 
     .log {
-      flex: 1;
+      height: 100%;
       background: #1e1e1e;
       color: #d4d4d4;
       border-radius: 6px;
       padding: 12px;
+      padding-right: 16px;
       font-family: 'SF Mono', Monaco, monospace;
       font-size: 11px;
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-all;
+      box-sizing: border-box;
     }
 
+    .log::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
+      border-radius: 3px;
+    }
+
+    .log::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.4);
+    }
+
+    .log-btns {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+    }
+
+    .log-btn {
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.1);
+      color: #18a0fb;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .log-btn:hover {
+      background: rgba(255,255,255,0.18);
+    }
+
+    .log-btn.paused {
+      color: #555;
+    }
+
+    .log-btn-clear {
+      color: #888;
+      font-size: 12px;
+    }
+    
     .log-entry {
       margin-bottom: 4px;
     }
-
-    .log-entry.success {
-      color: #4ec9b0;
-    }
-
-    .log-entry.error {
-      color: #f14c4c;
-    }
-
-    .log-entry.info {
-      color: #9cdcfe;
-    }
-
-    .log-entry.warn {
-      color: #dcdcaa;
-    }
-
+    
+    .log-entry.success { color: #4ec9b0; }
+    .log-entry.error { color: #f14c4c; }
+    .log-entry.info { color: #9cdcfe; }
+    .log-entry.warn { color: #dcdcaa; }
+    
     .progress {
       height: 4px;
       background: #e5e5e5;
       border-radius: 2px;
       overflow: hidden;
     }
-
+    
     .progress-bar {
       height: 100%;
       background: #18a0fb;
       width: 0%;
       transition: width 0.2s;
     }
-
+    
     input[type="file"] {
       display: none;
     }
-
+    
     .stats {
       font-size: 11px;
       color: #666;
     }
-
+    
     .hint {
       font-size: 10px;
       color: #999;
     }
+
+    .preview {
+      background: #f5f5f5;
+      border-radius: 4px;
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      grid-auto-rows: 18px;
+      align-items: center;
+      gap: 6px 8px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    .preview-row {
+      display: contents;
+    }
+
+    .preview-input { color: #888; }
+    .preview-arrow { color: #bbb; text-align: center; }
+    .preview-output { color: #333; }
+    .preview-output.changed { color: #18a0fb; }
   </style>
 </head>
 <body>
+  <div class="page-info hint">Page: <span id="pageName">—</span></div>
+
   <div class="settings">
-    <label>
-      Separator:
-      <input type="text" id="separator" value="_" style="width: 60px;">
+    <div class="settings-row">
+      <label>
+        Separator:
+        <input type="text" id="separator" value="_">
+      </label>
+      <span class="hint" id="formatHint"></span>
+    </div>
+    <label class="settings-row">
+      <input type="checkbox" id="parseEmojiNames">
+      Parse emoji names
     </label>
-    <span class="hint">Format: [category]_[name]_[theme]_[state].png</span>
+    <label class="settings-row">
+      <input type="checkbox" id="detectOffPattern">
+      Detect on/off variants
+    </label>
+    <label class="settings-row">
+      <input type="checkbox" id="retinaMode" checked>
+      Retina @2x (halve dimensions)
+    </label>
+    <div class="preview">
+      <div class="preview-row">
+        <span id="previewEmojiInput" class="preview-input"></span>
+        <span class="preview-arrow">→</span>
+        <span id="previewEmojiOutput" class="preview-output"></span>
+      </div>
+      <div class="preview-row">
+        <span id="previewOffInput" class="preview-input"></span>
+        <span class="preview-arrow">→</span>
+        <span id="previewOffOutput" class="preview-output"></span>
+      </div>
+    </div>
   </div>
-
-  <button id="actionBtn">📁 Select folder with icons</button>
+  
+  <div class="action-row">
+    <button id="actionBtn">📁 Select folder with icons</button>
+    <button id="secondaryBtn" style="display:none">✕ Change folder</button>
+  </div>
   <input type="file" id="fileInput" webkitdirectory multiple accept="image/png">
-
+  
   <div class="progress">
     <div class="progress-bar" id="progressBar"></div>
   </div>
-
+  
   <div class="stats" id="stats">Files processed: 0/0 (errors: 0), new icons: 0, skipped: 0</div>
-  <div class="log" id="log"></div>
+  <div class="log-container">
+    <div class="log" id="log"></div>
+    <div class="log-btns">
+      <button class="log-btn log-btn-clear" id="clearLogBtn" title="Clear log">✕</button>
+      <button class="log-btn" id="scrollBtn" title="Auto-scroll">↓</button>
+    </div>
+  </div>
 
   <script>
+    const EMOJI_NAMES = {"1F192":"Cool Button","1F31A":"New Moon Face","1F32D":"Hot Dog","1F34C":"Banana","1F353":"Strawberry","1F37E":"Bottle With Popping Cork","1F383":"Jack-O-Lantern","1F384":"Christmas Tree","1F385":"Santa Claus","1F389":"Party Popper","1F3C6":"Trophy","1F433":"Spouting Whale","1F440":"Eyes","1F44C":"Ok Hand","1F44D":"Thumbs Up","1F44E":"Thumbs Down","1F44F":"Clapping Hands","1F468-200D-1F4BB":"Man Technologist","1F47B":"Ghost","1F47E":"Alien Monster","1F485":"Nail Polish","1F48A":"Pill","1F48B":"Kiss Mark","1F494":"Broken Heart","1F498":"Heart With Arrow","1F4A9":"Pile Of Poo","1F4AF":"Hundred Points","1F525":"Fire","1F54A-FE0F":"Dove","1F595":"Middle Finger","1F5FF":"Moai","1F601":"Beaming Face With Smiling Eyes","1F602":"Face With Tears Of Joy","1F607":"Smiling Face With Halo","1F608":"Smiling Face With Horns","1F60D":"Smiling Face With Heart-Eyes","1F60E":"Smiling Face With Sunglasses","1F610":"Neutral Face","1F618":"Face Blowing A Kiss","1F621":"Enraged Face","1F622":"Crying Face","1F628":"Fearful Face","1F62D":"Loudly Crying Face","1F631":"Face Screaming In Fear","1F634":"Sleeping Face","1F648":"See-No-Evil Monkey","1F649":"Hear-No-Evil Monkey","1F64A":"Speak-No-Evil Monkey","1F64F":"Folded Hands","1F913":"Nerd Face","1F914":"Thinking Face","1F917":"Smiling Face With Open Hands","1F91D":"Handshake","1F921":"Clown Face","1F923":"Rolling On The Floor Laughing","1F928":"Face With Raised Eyebrow","1F929":"Star-Struck","1F92A":"Zany Face","1F92C":"Face With Symbols On Mouth","1F92E":"Face Vomiting","1F92F":"Exploding Head","1F937":"Person Shrugging","1F970":"Smiling Face With Hearts","1F971":"Yawning Face","1F974":"Woozy Face","1F984":"Unicorn","1FAE1":"Saluting Face","2603-FE0F":"Snowman","26A1":"High Voltage","270D-FE0F":"Writing Hand","2764-FE0F":"Red Heart","2764-FE0F-200D-1F525":"Heart On Fire"};
+
     const actionBtn = document.getElementById('actionBtn');
     const fileInput = document.getElementById('fileInput');
     const logEl = document.getElementById('log');
     const progressBar = document.getElementById('progressBar');
     const statsEl = document.getElementById('stats');
     const separatorInput = document.getElementById('separator');
+    const formatHint = document.getElementById('formatHint');
+    const scrollBtn = document.getElementById('scrollBtn');
+    const clearLogBtn = document.getElementById('clearLogBtn');
+    const parseEmojiCheck = document.getElementById('parseEmojiNames');
+    const detectOffCheck = document.getElementById('detectOffPattern');
+    const retinaModeCheck = document.getElementById('retinaMode');
 
-    let isProcessing = false;
+    let autoScroll = true;
+
+    clearLogBtn.addEventListener('click', () => {
+      logEl.innerHTML = '';
+    });
+
+    scrollBtn.addEventListener('click', () => {
+      autoScroll = !autoScroll;
+      scrollBtn.classList.toggle('paused', !autoScroll);
+      if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
+    });
+
+    function updateFormatHint() {
+      const sep = separatorInput.value || '_';
+      formatHint.textContent = `[category]${sep}[name]${sep}[theme]${sep}[state].png`;
+    }
+    function capitalize(str) {
+      const cp = [...str];
+      if (!cp.length) return str;
+      return cp[0].toUpperCase() + cp.slice(1).join('').toLowerCase();
+    }
+
+    function updatePreview() {
+      const sep = separatorInput.value || '_';
+      const parseEmoji = parseEmojiCheck.checked;
+      const detectOff = detectOffCheck.checked;
+
+      // Emoji example
+      const emojiName = '1F600';
+      document.getElementById('previewEmojiInput').textContent = `emoji${sep}${emojiName}${sep}light${sep}default.png`;
+      let emojiDisplay = emojiName;
+      let emojiChanged = false;
+      if (parseEmoji) {
+        const parsed = parseEmojiFromName(emojiName);
+        if (parsed) {
+          emojiDisplay = parsed.name ? `${parsed.emoji} ${parsed.name} (${emojiName})` : `${parsed.emoji} ${emojiName}`;
+          emojiChanged = true;
+        }
+      }
+      const emojiOutputEl = document.getElementById('previewEmojiOutput');
+      emojiOutputEl.textContent = `Icon / Emoji / ${capitalize(emojiDisplay)}`;
+      emojiOutputEl.className = 'preview-output' + (emojiChanged ? ' changed' : '');
+
+      // On/off example
+      document.getElementById('previewOffInput').textContent = `ico${sep}heart_off${sep}light${sep}default.png`;
+      const offOutputEl = document.getElementById('previewOffOutput');
+      if (detectOff) {
+        offOutputEl.textContent = 'Icon / Ico / Heart  (state=on, state=off)';
+        offOutputEl.className = 'preview-output changed';
+      } else {
+        offOutputEl.textContent = 'Icon / Ico / Heart_off';
+        offOutputEl.className = 'preview-output';
+      }
+    }
+
+    function updateSeparatorState() {
+      updateFormatHint();
+      updatePreview();
+      if (appState === 'idle') actionBtn.disabled = separatorInput.value.trim() === '';
+    }
+    separatorInput.addEventListener('input', updateSeparatorState);
+    parseEmojiCheck.addEventListener('change', updatePreview);
+    detectOffCheck.addEventListener('change', updatePreview);
+    updateFormatHint();
+    updatePreview();
+
+    let appState = 'idle'; // 'idle' | 'preview' | 'processing'
+    let pendingImport = null;
     let isCancelled = false;
 
+    const secondaryBtn = document.getElementById('secondaryBtn');
+
+    function setAppState(state) {
+      appState = state;
+      const inIdle = state === 'idle';
+      const inPreview = state === 'preview';
+
+      separatorInput.disabled = !inIdle;
+      parseEmojiCheck.disabled = !inIdle;
+      detectOffCheck.disabled = !inIdle;
+      retinaModeCheck.disabled = !inIdle;
+
+      if (inIdle) {
+        actionBtn.disabled = separatorInput.value.trim() === '';
+        actionBtn.textContent = '📁 Select folder with icons';
+        actionBtn.className = '';
+        secondaryBtn.style.display = 'none';
+        setProgress(0);
+      } else if (inPreview) {
+        actionBtn.disabled = false;
+        actionBtn.textContent = `✅ Confirm import (${pendingImport.totalIcons} icons)`;
+        actionBtn.className = 'confirm';
+        secondaryBtn.style.display = '';
+      } else {
+        actionBtn.disabled = false;
+        actionBtn.textContent = '⛔ Cancel';
+        actionBtn.className = 'cancel';
+        secondaryBtn.style.display = 'none';
+      }
+    }
+
+    secondaryBtn.addEventListener('click', () => {
+      pendingImport = null;
+      setAppState('idle');
+      fileInput.value = '';
+      log('Folder deselected. Select a new folder to start.', 'info');
+    });
+    
     // Format time in 24h format
     function formatTime() {
       const now = new Date();
@@ -168,224 +429,280 @@
       const s = String(now.getSeconds()).padStart(2, '0');
       return `${h}:${m}:${s}`;
     }
-
+    
     function log(message, type = '') {
       const entry = document.createElement('div');
       entry.className = `log-entry ${type}`;
       entry.textContent = `[${formatTime()}] ${message}`;
       logEl.appendChild(entry);
-      logEl.scrollTop = logEl.scrollHeight;
+      if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
     }
 
     function setProgress(percent) {
       progressBar.style.width = `${percent}%`;
     }
-
+    
     function setStats(text) {
       statsEl.textContent = text;
     }
-
+    
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
+    
+    
 
-    function setProcessingState(processing) {
-      isProcessing = processing;
-      separatorInput.disabled = processing;
+    function parseEmojiFromName(name) {
+      try {
+        const parts = name.split('-');
+        if (parts.some(p => p.length < 4 || !/^[0-9a-fA-F]+$/.test(p))) return null;
+        const codePoints = parts.map(p => parseInt(p, 16));
+        if (codePoints.some(cp => cp > 0x10FFFF)) return null;
+        const emoji = String.fromCodePoint(...codePoints);
 
-      if (processing) {
-        actionBtn.textContent = '⛔ Cancel';
-        actionBtn.classList.add('cancel');
+        // Lookup name: try exact key, then strip FE0F/skin tones
+        const upper = name.toUpperCase();
+        const skinTones = ['1F3FB','1F3FC','1F3FD','1F3FE','1F3FF'];
+        let emojiName = EMOJI_NAMES[upper]
+          || EMOJI_NAMES[upper.split('-').filter(p => p !== 'FE0F').join('-')]
+          || EMOJI_NAMES[upper.split('-').filter(p => !skinTones.includes(p) && p !== 'FE0F' && p !== '200D').join('-')]
+          || null;
 
-      } else {
-        actionBtn.textContent = '📁 Select folder with icons';
-        actionBtn.classList.remove('cancel');
+        return { emoji, name: emojiName };
+      } catch (e) {
+        return null;
       }
     }
 
-    function buildPattern(sep) {
-      const escapedSep = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`^(\\w+?)${escapedSep}(\\w+?)${escapedSep}(\\w+?)${escapedSep}(\\w+?)\\.png$`, 'i');
+    function parseName(filename, sep) {
+      const base = filename.slice(0, -4); // remove .png
+      const parts = base.split(sep);
+      if (parts.length !== 4) return null;
+      const [category, name, theme, state] = parts;
+      return { category, name, theme, state };
     }
-
+    
     actionBtn.addEventListener('click', () => {
-      if (isProcessing) {
+      if (appState === 'processing') {
         isCancelled = true;
         log('⛔ Cancelling operation...', 'warn');
-
-        return;
+      } else if (appState === 'preview') {
+        startImport(pendingImport);
+      } else {
+        fileInput.click();
       }
-
-      fileInput.click();
     });
 
-    fileInput.addEventListener('change', async (e) => {
+    // Parse phase — only filename grouping, no file reading
+    fileInput.addEventListener('change', (e) => {
       const files = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.png'));
       const separator = separatorInput.value || '_';
-      const pattern = buildPattern(separator);
+      const parseEmojiNamesOpt = parseEmojiCheck.checked;
+      const detectOffPatternOpt = detectOffCheck.checked;
 
       if (files.length === 0) {
         log('No PNG files found', 'error');
         return;
       }
 
-      log(`Found ${files.length} PNG files (separator: "${separator}")`, 'info');
-      setProcessingState(true);
-      isCancelled = false;
+      log(`\n📁 Found ${files.length} PNG files (separator: "${separator}")`, 'info');
 
-      // Group by icons (category_name)
       const groups = {};
+      const parsedFiles = [];
+      let invalidCount = 0;
 
-      // Collect all unique themes and states for each group
       for (const file of files) {
-        const match = file.name.match(pattern);
-        if (!match) {
-          log(`⚠️ Skipped (invalid name: ${file.name}`, 'error');
-          continue;
+        const parsed = parseName(file.name, separator);
+        if (!parsed) { invalidCount++; continue; }
+
+        let { category, name, theme, state } = parsed;
+        let isOffVariant = false;
+        let baseName = name;
+
+        if (detectOffPatternOpt && name.endsWith('_off')) {
+          isOffVariant = true;
+          baseName = name.slice(0, -4);
+        }
+        if (parseEmojiNamesOpt) {
+          const parsed = parseEmojiFromName(baseName);
+          if (parsed) baseName = parsed.name ? `${parsed.emoji} ${parsed.name} (${baseName})` : `${parsed.emoji} ${baseName}`;
         }
 
-        const [, category, name, theme, state] = match;
-        const groupKey = `${category}${separator}${name}`;
-
-        if (!groups[groupKey]) {
-          groups[groupKey] = {
-            category,
-            name,
-            themes: new Set(),
-            states: new Set(),
-            files: {}
-          };
-        }
-
-        groups[groupKey].themes.add(theme);
-        groups[groupKey].states.add(state);
-        groups[groupKey].files[`${theme}${separator}${state}`] = file;
+        parsedFiles.push({ file, category, name, baseName, theme, state, isOffVariant });
       }
 
-      // Group by categories for proper positioning
-      const categories = {};
-      for (const [key, group] of Object.entries(groups)) {
-        if (!categories[group.category]) {
-          categories[group.category] = [];
+      if (invalidCount > 0) {
+        log(`⚠️ Skipped ${invalidCount} files (invalid name format)`, 'warn');
+      }
+
+      // Build a Set of "on" variant keys for O(1) lookup
+      const onVariantKeys = new Set();
+      for (const pf of parsedFiles) {
+        if (!pf.isOffVariant) {
+          onVariantKeys.add(`${pf.category}\0${pf.baseName}\0${pf.theme}`);
+        }
+      }
+      const offPatternGroups = new Set();
+      for (const pf of parsedFiles) {
+        if (pf.isOffVariant && onVariantKeys.has(`${pf.category}\0${pf.baseName}\0${pf.theme}`)) {
+          offPatternGroups.add(`${pf.category}${separator}${pf.baseName}`);
+        }
+      }
+
+      if (detectOffPatternOpt && offPatternGroups.size > 0) {
+        log(`Found ${offPatternGroups.size} icon groups using on/off pattern`, 'info');
+      }
+
+      for (const pf of parsedFiles) {
+        const groupKey = `${pf.category}${separator}${pf.baseName}`;
+        const usesOffPattern = offPatternGroups.has(groupKey);
+
+        let effectiveName = pf.baseName;
+        let effectiveState = pf.state;
+
+        if (usesOffPattern) {
+          if (pf.theme !== 'light') continue;
+          effectiveState = pf.isOffVariant ? 'off' : 'on';
+        } else if (pf.isOffVariant) {
+          effectiveName = pf.name;
         }
 
-        categories[group.category].push({ key, ...group });
+        const actualGroupKey = `${pf.category}${separator}${effectiveName}`;
+        if (!groups[actualGroupKey]) {
+          groups[actualGroupKey] = {
+            category: pf.category, name: effectiveName,
+            themes: new Set(), states: new Set(), files: {}, usesOffPattern
+          };
+        }
+        if (!usesOffPattern) groups[actualGroupKey].themes.add(pf.theme);
+        groups[actualGroupKey].states.add(effectiveState);
+        groups[actualGroupKey].files[`${pf.theme}${separator}${effectiveState}`] = pf.file;
+      }
+
+      const categories = {};
+      for (const [, group] of Object.entries(groups)) {
+        if (!categories[group.category]) categories[group.category] = [];
+        categories[group.category].push({ ...group });
       }
 
       const categoryNames = Object.keys(categories);
       const totalIcons = Object.keys(groups).length;
-      const totalFiles = files.length;
 
-      log(`Grouped into ${totalIcons} components, ${categoryNames.length} categories`, 'info');
+      log(`Grouped into ${totalIcons} icons across ${categoryNames.length} categories:`, 'info');
+      for (const catName of categoryNames) {
+        log(`  📂 ${catName}: ${categories[catName].length} icons`, 'info');
+      }
 
-      let processedIcons = 0;
+      setStats(`Ready: ${totalIcons} icons across ${categoryNames.length} categories`);
+      pendingImport = { groups, categories, categoryNames, totalIcons, totalFiles: files.length, separator, retinaMode: retinaModeCheck.checked };
+      setAppState('preview');
+      fileInput.value = '';
+    });
+
+    // Import phase — reads file bytes and creates Figma components
+    async function startImport(pending) {
+      const { groups, categories, categoryNames, totalIcons, totalFiles, separator, retinaMode } = pending;
+      const scaleFactor = retinaMode ? 2 : 1;
+      pendingImport = null;
+      setAppState('processing');
+      isCancelled = false;
+
+      log(`\n▶ Starting import of ${totalIcons} icons...`, 'info');
+
+      await rescanComponents();
+
+      let processed = 0;
       let processedFiles = 0;
-
-      let createdCount = 0;
-      let skippedCount = 0;
       let errorCount = 0;
-
+      let skippedCount = 0;
+      let createdCount = 0;
       let currentY = 0;
 
       function updateStats() {
         setStats(`Files processed: ${processedFiles}/${totalFiles} (errors: ${errorCount}), new icons: ${createdCount}, skipped: ${skippedCount}`);
       }
-
       updateStats();
 
       for (const categoryName of categoryNames) {
-        if (isCancelled) {
-          break;
-        }
+        if (isCancelled) break;
 
         const categoryGroups = categories[categoryName];
-        let currentX = 0;
-        let maxHeightInRow = 0;
 
         log(`\n📂 Category: ${categoryName}`, 'info');
 
+        // Sub-group by variant signature (same themes + states → same row)
+        const rowMap = {};
         for (const group of categoryGroups) {
-          if (isCancelled) {
-            break;
-          }
+          const themes = Array.from(group.themes).sort().join(',');
+          const states = Array.from(group.states).sort().join(',');
+          const sig = `${themes}|${states}`;
+          if (!rowMap[sig]) rowMap[sig] = [];
+          rowMap[sig].push(group);
+        }
+
+        for (const rowGroups of Object.values(rowMap)) {
+        let currentX = 0;
+        let maxHeightInRow = 0;
+
+        for (const group of rowGroups) {
+          if (isCancelled) break;
 
           log(`\n📦 Processing: ${group.category} / ${group.name}`, 'info');
 
           const themes = Array.from(group.themes).sort();
           const states = Array.from(group.states).sort();
+          const onlyDefaultState = states.length === 1 && states[0] === 'default';
+          const effectiveStates = onlyDefaultState ? [] : states;
+          const noThemes = group.usesOffPattern;
 
-          log(`  Themes: ${themes.join(', ')}`, 'info');
-          log(`  States: ${states.join(', ')}`, 'info');
+          log(`  Themes: ${noThemes ? '(none - using light only)' : themes.join(', ')}`, 'info');
+          log(`  States: ${effectiveStates.length > 0 ? effectiveStates.join(', ') : '(none - only default)'}`, 'info');
+          if (group.usesOffPattern) log(`  Using on/off pattern (light theme only, no theme property)`, 'info');
 
           const variantsData = [];
           let iconWidth = 16;
           let iconHeight = 16;
           let hasProblems = false;
 
-          for (const theme of themes) {
+          const effectiveThemes = noThemes ? ['light'] : themes;
+          let sizeDetected = false;
+          for (const theme of effectiveThemes) {
+            if (sizeDetected) break;
             for (const state of states) {
               const file = group.files[`${theme}${separator}${state}`];
               if (file) {
                 try {
                   const dimensions = await getImageDimensions(file);
-                  iconWidth = dimensions.width / 2;
-                  iconHeight = dimensions.height / 2;
+                  iconWidth = dimensions.width / scaleFactor;
+                  iconHeight = dimensions.height / scaleFactor;
+                  sizeDetected = true;
                   break;
                 } catch (e) {}
               }
             }
-            if (iconWidth !== 16) {
-              break;
-            }
           }
 
-          // Create matrix of all theme x state combinations
-          for (const theme of themes) {
+          for (const theme of effectiveThemes) {
             for (const state of states) {
-              const fileKey = `${theme}${separator}${state}`;
-              const file = group.files[fileKey];
-
+              const file = group.files[`${theme}${separator}${state}`];
               if (file) {
                 try {
                   const bytes = await readFileAsBytes(file);
                   const dimensions = await getImageDimensions(file);
-
-                  variantsData.push({
-                    theme,
-                    state,
-                    bytes: Array.from(bytes),
-                    width: dimensions.width,
-                    height: dimensions.height,
-                    isMissing: false
-                  });
-
+                  variantsData.push({ theme, state, bytes: Array.from(bytes), width: dimensions.width, height: dimensions.height, displayWidth: dimensions.width / scaleFactor, displayHeight: dimensions.height / scaleFactor, isMissing: false });
                   processedFiles++;
                   log(`  ✓ ${theme}/${state} (${dimensions.width}x${dimensions.height})`, 'success');
                 } catch (err) {
                   errorCount++;
                   hasProblems = true;
-                  log(`  ✗ Error reading ${file.name}: ${err.message} (${err.name})`, 'error');
-                  variantsData.push({
-                    theme,
-                    state,
-                    isMissing: true,
-                    width: iconWidth * 2,
-                    height: iconHeight * 2
-                  });
+                  log(`  ✗ Error reading ${file.name}: ${err.message}`, 'error');
+                  variantsData.push({ theme, state, isMissing: true, width: iconWidth * scaleFactor, height: iconHeight * scaleFactor, displayWidth: iconWidth, displayHeight: iconHeight });
                 }
-
               } else {
                 hasProblems = true;
                 log(`  ⚠️ Missing: ${theme}/${state} — placeholder will be created`, 'warn');
-                variantsData.push({
-                  theme,
-                  state,
-                  isMissing: true,
-                  width: iconWidth * 2,
-                  height: iconHeight * 2
-                });
+                variantsData.push({ theme, state, isMissing: true, width: iconWidth * scaleFactor, height: iconHeight * scaleFactor, displayWidth: iconWidth, displayHeight: iconHeight });
               }
-
               updateStats();
             }
           }
@@ -394,52 +711,53 @@
             parent.postMessage({
               pluginMessage: {
                 type: 'create-icon',
-                category: group.category,
-                name: group.name,
-                themes,
-                states,
-                variants: variantsData,
-                position: { x: currentX, y: currentY },
-                hasProblems,
-                iconWidth,
-                iconHeight
+                category: group.category, name: group.name,
+                themes: noThemes ? [] : themes, states: effectiveStates,
+                variants: variantsData, position: { x: currentX, y: currentY },
+                hasProblems, iconWidth, iconHeight, onlyDefaultState, noThemes
               }
             }, '*');
 
             const componentResult = await waitForComponentCreated();
             if (componentResult.skipped) {
               skippedCount++;
-
             } else {
               createdCount++;
               currentX += componentResult.width + 40;
               maxHeightInRow = Math.max(maxHeightInRow, componentResult.height);
+              // Wrap row at 3000px width
+              if (currentX > 3000) {
+                currentY += maxHeightInRow + 40;
+                currentX = 0;
+                maxHeightInRow = 0;
+              }
             }
           }
 
-          processedIcons++;
-          setProgress((processedIcons / totalIcons) * 100);
+          processed++;
+          setProgress((processed / totalIcons) * 100);
           updateStats();
 
-          if (!isCancelled && processedIcons < totalIcons) {
+          if (!isCancelled && processed < totalIcons) {
+            log(`  ⏳ Pause 500ms...`, 'info');
             await sleep(500);
           }
         }
 
         currentY += maxHeightInRow + 40;
+        }
       }
 
       if (isCancelled) {
-        log(`\n⛔ Stopped! Processed ${processedIcons} / ${totalIcons}`, 'warn');
+        log(`\n⛔ Operation cancelled. Processed ${processed} of ${totalIcons}`, 'warn');
       } else {
-        log(`\n✅ Done! Created: ${createdCount}, skipped: ${skippedCount}`, 'success');
+        log(`\n✅ Done! Created: ${createdCount}, skipped (already exist): ${skippedCount}`, 'success');
       }
 
       updateStats();
-      setProcessingState(false);
-      fileInput.value = '';
-    });
-
+      setAppState('idle');
+    }
+    
     function readFileAsBytes(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -448,11 +766,10 @@
         reader.readAsArrayBuffer(file);
       });
     }
-
+    
     function getImageDimensions(file) {
       return new Promise((resolve, reject) => {
         const img = new Image();
-
         img.onload = () => {
           resolve({ width: img.width, height: img.height });
           URL.revokeObjectURL(img.src);
@@ -461,7 +778,8 @@
         img.src = URL.createObjectURL(file);
       });
     }
-
+    
+    // Promise for waiting component creation
     let componentCreatedResolve = null;
 
     function waitForComponentCreated() {
@@ -470,26 +788,36 @@
       });
     }
 
-    // Figma Plugin communication
+    let rescanDoneResolve = null;
+
+    function rescanComponents() {
+      parent.postMessage({ pluginMessage: { type: 'rescan-components' } }, '*');
+      return new Promise(resolve => { rescanDoneResolve = resolve; });
+    }
+
+    // Messages from plugin
     window.onmessage = (e) => {
       const msg = e.data.pluginMessage;
-      if (!msg) {
-        return;
-      }
+      if (!msg) return;
 
-      if (msg.type === 'log') {
+      if (msg.type === 'page-info') {
+        document.getElementById('pageName').textContent = msg.name;
+      } else if (msg.type === 'log') {
         log(msg.message, msg.level || '');
-        return;
-      }
-
-      if (msg.type === 'component-created' && componentCreatedResolve) {
-        componentCreatedResolve({
-          width: msg.width,
-          height: msg.height,
-          skipped: msg.skipped || false
-        });
-
-        componentCreatedResolve = null;
+      } else if (msg.type === 'rescan-done') {
+        if (rescanDoneResolve) {
+          rescanDoneResolve();
+          rescanDoneResolve = null;
+        }
+      } else if (msg.type === 'component-created') {
+        if (componentCreatedResolve) {
+          componentCreatedResolve({
+            width: msg.width,
+            height: msg.height,
+            skipped: msg.skipped || false
+          });
+          componentCreatedResolve = null;
+        }
       }
     };
   </script>

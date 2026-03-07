@@ -1,6 +1,6 @@
 {
-  "name": "(Private) Icon Importer",
-  "id": "ho-icon-importer-plugin",
+  "name": "Icon Importer",
+  "id": "icon-importer-plugin",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
