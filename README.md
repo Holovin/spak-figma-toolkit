@@ -1,5 +1,6 @@
 # SPAK Figma Toolkit
-<img width="517" height="626" alt="image" src="https://github.com/user-attachments/assets/37ca3f49-abe1-4805-969d-9607ca3cc546" />
+<img width="929" height="634" alt="image" src="https://github.com/user-attachments/assets/93a8e65c-5013-4687-8488-23973c8b4626" />
+
 
 A Figma plugin with tools for bulk operations: icon importing and mass constraint editing.
 
