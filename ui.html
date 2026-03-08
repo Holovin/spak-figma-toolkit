@@ -7,7 +7,7 @@
       margin: 0;
       padding: 0;
     }
-    
+
     body {
       font-family: Inter, system-ui, sans-serif;
       font-size: 12px;
@@ -17,7 +17,7 @@
       gap: 12px;
       height: 100vh;
     }
-    
+
     button {
       background: #18a0fb;
       color: white;
@@ -28,19 +28,19 @@
       font-weight: 500;
       cursor: pointer;
     }
-    
+
     button:hover {
       background: #0d8de5;
     }
-    
+
     button.cancel {
       background: #f24822;
     }
-    
+
     button.cancel:hover {
       background: #d93d1a;
     }
-    
+
     button:disabled {
       background: #ccc;
       cursor: not-allowed;
@@ -52,6 +52,51 @@
 
     button.confirm:hover {
       background: #157a38;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      color: #999;
+      border: 1.5px solid #ccc;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .tab-btn:hover {
+      color: #555;
+      border-color: #aaa;
+      background: #f5f5f5;
+    }
+
+    .tab-btn.active {
+      color: #18a0fb;
+      border-color: #18a0fb;
+      background: transparent;
+    }
+
+    .tab-btn.active:hover {
+      background: rgba(24, 160, 251, 0.05);
+    }
+
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .tab-content.active {
+      display: flex;
     }
 
     .action-row {
@@ -75,7 +120,7 @@
       background: #f5f5f5;
       color: #333;
     }
-    
+
     .settings {
       display: flex;
       flex-direction: column;
@@ -103,7 +148,29 @@
       font-size: 12px;
       text-align: center;
     }
-    
+
+    /* Separator */
+    .separator {
+      border: none;
+      border-top: 2px dotted #ccc;
+      margin: 0;
+    }
+
+    /* Page & selection info bar */
+    .info-bar {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 10px 0;
+      flex-shrink: 0;
+    }
+
+    .info-bar span {
+      color: #333;
+    }
+
     .log-container {
       position: relative;
       flex: 1;
@@ -179,39 +246,44 @@
       color: #888;
       font-size: 12px;
     }
-    
+
     .log-entry {
       margin-bottom: 4px;
     }
-    
+
     .log-entry.success { color: #4ec9b0; }
     .log-entry.error { color: #f14c4c; }
     .log-entry.info { color: #9cdcfe; }
     .log-entry.warn { color: #dcdcaa; }
-    
+
     .progress {
       height: 4px;
       background: #e5e5e5;
       border-radius: 2px;
       overflow: hidden;
+      flex-shrink: 0;
     }
-    
+
     .progress-bar {
       height: 100%;
       background: #18a0fb;
       width: 0%;
       transition: width 0.2s;
     }
-    
+
     input[type="file"] {
       display: none;
     }
-    
+
     .stats {
       font-size: 11px;
       color: #666;
+      flex-shrink: 0;
+      margin-top: 6px;
+      margin-bottom: 4px;
+      font-family: 'SF Mono', Monaco, monospace;
     }
-    
+
     .hint {
       font-size: 10px;
       color: #999;
@@ -239,66 +311,177 @@
     .preview-arrow { color: #bbb; text-align: center; }
     .preview-output { color: #333; }
     .preview-output.changed { color: #18a0fb; }
+
+    .utils-section {
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      padding: 14px 12px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .utils-section legend {
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      padding: 0 5px;
+    }
+
+    select {
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      background: white;
+      cursor: pointer;
+    }
+
+    #constraintCancelBtn {
+      background: transparent;
+      color: #999;
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      white-space: nowrap;
+      flex: 0 0 30%;
+    }
+
+    #constraintCancelBtn:hover {
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .bottom-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+      background: #f0f0f0;
+      margin: 0 -16px -16px -16px;
+      padding: 10px 16px 16px 16px;
+      border-top: 2px dotted #ccc;
+    }
   </style>
 </head>
 <body>
-  <div class="page-info hint">Page: <span id="pageName">—</span></div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="importer">Icon Importer</button>
+    <button class="tab-btn" data-tab="utils">Utils</button>
+  </div>
 
-  <div class="settings">
-    <div class="settings-row">
-      <label>
-        Separator:
-        <input type="text" id="separator" value="_">
+  <!-- Tab: Icon Importer -->
+  <div class="tab-content active" id="tab-importer">
+    <div class="settings">
+      <div class="settings-row">
+        <label>
+          Separator:
+          <input type="text" id="separator" value="_">
+        </label>
+        <span class="hint" id="formatHint"></span>
+      </div>
+      <label class="settings-row">
+        <input type="checkbox" id="parseEmojiNames">
+        Parse emoji names
       </label>
-      <span class="hint" id="formatHint"></span>
-    </div>
-    <label class="settings-row">
-      <input type="checkbox" id="parseEmojiNames">
-      Parse emoji names
-    </label>
-    <label class="settings-row">
-      <input type="checkbox" id="detectOffPattern">
-      Detect on/off variants
-    </label>
-    <label class="settings-row">
-      <input type="checkbox" id="retinaMode" checked>
-      Retina @2x (halve dimensions)
-    </label>
-    <div class="preview">
-      <div class="preview-row">
-        <span id="previewEmojiInput" class="preview-input"></span>
-        <span class="preview-arrow">→</span>
-        <span id="previewEmojiOutput" class="preview-output"></span>
-      </div>
-      <div class="preview-row">
-        <span id="previewOffInput" class="preview-input"></span>
-        <span class="preview-arrow">→</span>
-        <span id="previewOffOutput" class="preview-output"></span>
+      <label class="settings-row">
+        <input type="checkbox" id="detectOffPattern">
+        Detect on/off variants
+      </label>
+      <label class="settings-row">
+        <input type="checkbox" id="retinaMode" checked>
+        Retina @2x (halve dimensions)
+      </label>
+      <div class="preview">
+        <div class="preview-row">
+          <span id="previewEmojiInput" class="preview-input"></span>
+          <span class="preview-arrow">→</span>
+          <span id="previewEmojiOutput" class="preview-output"></span>
+        </div>
+        <div class="preview-row">
+          <span id="previewOffInput" class="preview-input"></span>
+          <span class="preview-arrow">→</span>
+          <span id="previewOffOutput" class="preview-output"></span>
+        </div>
       </div>
     </div>
+
+    <div class="action-row">
+      <button id="actionBtn">📁 Select folder with icons</button>
+      <button id="secondaryBtn" style="display:none">✕ Change folder</button>
+    </div>
+    <input type="file" id="fileInput" webkitdirectory multiple accept="image/png">
   </div>
-  
-  <div class="action-row">
-    <button id="actionBtn">📁 Select folder with icons</button>
-    <button id="secondaryBtn" style="display:none">✕ Change folder</button>
+
+  <!-- Tab: Utils -->
+  <div class="tab-content" id="tab-utils">
+    <fieldset class="utils-section">
+      <legend>Mass Constraints Edit</legend>
+      <div class="settings">
+        <div class="settings-row">
+          <label>X:
+            <select id="constraintX">
+              <option value="MIN">Left</option>
+              <option value="MAX">Right</option>
+              <option value="STRETCH">Left + Right</option>
+              <option value="CENTER">Center</option>
+              <option value="SCALE">Scale</option>
+            </select>
+          </label>
+          <label>Y:
+            <select id="constraintY">
+              <option value="MIN">Top</option>
+              <option value="MAX">Bottom</option>
+              <option value="STRETCH">Top + Bottom</option>
+              <option value="CENTER">Center</option>
+              <option value="SCALE">Scale</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="action-row">
+        <button id="constraintActionBtn">Preview</button>
+        <button id="constraintCancelBtn" style="display:none">Cancel</button>
+      </div>
+    </fieldset>
   </div>
-  <input type="file" id="fileInput" webkitdirectory multiple accept="image/png">
-  
-  <div class="progress">
-    <div class="progress-bar" id="progressBar"></div>
-  </div>
-  
-  <div class="stats" id="stats">Files processed: 0/0 (errors: 0), new icons: 0, skipped: 0</div>
-  <div class="log-container">
-    <div class="log" id="log"></div>
-    <div class="log-btns">
-      <button class="log-btn log-btn-clear" id="clearLogBtn" title="Clear log">✕</button>
-      <button class="log-btn" id="scrollBtn" title="Auto-scroll">↓</button>
+
+  <!-- Shared bottom section -->
+  <div class="bottom-section">
+    <div class="progress">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="stats" id="stats">Waiting for command</div>
+    <div class="info-bar">
+      Page: <span id="pageName">—</span>, selected: <span id="selectionInfo">0</span>
+    </div>
+    <div class="log-container">
+      <div class="log" id="log"></div>
+      <div class="log-btns">
+        <button class="log-btn log-btn-clear" id="clearLogBtn" title="Clear log">✕</button>
+        <button class="log-btn" id="scrollBtn" title="Auto-scroll">↓</button>
+      </div>
     </div>
   </div>
 
   <script>
     const EMOJI_NAMES = {"1F192":"Cool Button","1F31A":"New Moon Face","1F32D":"Hot Dog","1F34C":"Banana","1F353":"Strawberry","1F37E":"Bottle With Popping Cork","1F383":"Jack-O-Lantern","1F384":"Christmas Tree","1F385":"Santa Claus","1F389":"Party Popper","1F3C6":"Trophy","1F433":"Spouting Whale","1F440":"Eyes","1F44C":"Ok Hand","1F44D":"Thumbs Up","1F44E":"Thumbs Down","1F44F":"Clapping Hands","1F468-200D-1F4BB":"Man Technologist","1F47B":"Ghost","1F47E":"Alien Monster","1F485":"Nail Polish","1F48A":"Pill","1F48B":"Kiss Mark","1F494":"Broken Heart","1F498":"Heart With Arrow","1F4A9":"Pile Of Poo","1F4AF":"Hundred Points","1F525":"Fire","1F54A-FE0F":"Dove","1F595":"Middle Finger","1F5FF":"Moai","1F601":"Beaming Face With Smiling Eyes","1F602":"Face With Tears Of Joy","1F607":"Smiling Face With Halo","1F608":"Smiling Face With Horns","1F60D":"Smiling Face With Heart-Eyes","1F60E":"Smiling Face With Sunglasses","1F610":"Neutral Face","1F618":"Face Blowing A Kiss","1F621":"Enraged Face","1F622":"Crying Face","1F628":"Fearful Face","1F62D":"Loudly Crying Face","1F631":"Face Screaming In Fear","1F634":"Sleeping Face","1F648":"See-No-Evil Monkey","1F649":"Hear-No-Evil Monkey","1F64A":"Speak-No-Evil Monkey","1F64F":"Folded Hands","1F913":"Nerd Face","1F914":"Thinking Face","1F917":"Smiling Face With Open Hands","1F91D":"Handshake","1F921":"Clown Face","1F923":"Rolling On The Floor Laughing","1F928":"Face With Raised Eyebrow","1F929":"Star-Struck","1F92A":"Zany Face","1F92C":"Face With Symbols On Mouth","1F92E":"Face Vomiting","1F92F":"Exploding Head","1F937":"Person Shrugging","1F970":"Smiling Face With Hearts","1F971":"Yawning Face","1F974":"Woozy Face","1F984":"Unicorn","1FAE1":"Saluting Face","2603-FE0F":"Snowman","26A1":"High Voltage","270D-FE0F":"Writing Hand","2764-FE0F":"Red Heart","2764-FE0F-200D-1F525":"Heart On Fire"};
+
+    // Tab switching
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + target).classList.add('active');
+        resetAllState();
+      });
+    });
 
     const actionBtn = document.getElementById('actionBtn');
     const fileInput = document.getElementById('fileInput');
@@ -312,6 +495,12 @@
     const parseEmojiCheck = document.getElementById('parseEmojiNames');
     const detectOffCheck = document.getElementById('detectOffPattern');
     const retinaModeCheck = document.getElementById('retinaMode');
+    const selectionInfoEl = document.getElementById('selectionInfo');
+    const constraintActionBtn = document.getElementById('constraintActionBtn');
+    const constraintCancelBtn = document.getElementById('constraintCancelBtn');
+    const constraintXSel = document.getElementById('constraintX');
+    const constraintYSel = document.getElementById('constraintY');
+    let utilsState = 'idle'; // 'idle' | 'preview' | 'applying'
 
     let autoScroll = true;
 
@@ -389,11 +578,24 @@
       appState = state;
       const inIdle = state === 'idle';
       const inPreview = state === 'preview';
+      const inProcessing = state === 'processing';
 
       separatorInput.disabled = !inIdle;
       parseEmojiCheck.disabled = !inIdle;
       detectOffCheck.disabled = !inIdle;
       retinaModeCheck.disabled = !inIdle;
+
+      // Block tabs during processing
+      tabBtns.forEach(btn => {
+        btn.disabled = inProcessing;
+        if (inProcessing) {
+          btn.style.pointerEvents = 'none';
+          btn.style.opacity = '0.5';
+        } else {
+          btn.style.pointerEvents = '';
+          btn.style.opacity = '';
+        }
+      });
 
       if (inIdle) {
         actionBtn.disabled = separatorInput.value.trim() === '';
@@ -420,7 +622,88 @@
       fileInput.value = '';
       log('Folder deselected. Select a new folder to start.', 'info');
     });
-    
+
+    // Utils state management
+    function setUtilsState(state) {
+      utilsState = state;
+      constraintXSel.disabled = state !== 'idle';
+      constraintYSel.disabled = state !== 'idle';
+
+      const isApplying = state === 'applying';
+      tabBtns.forEach(btn => {
+        btn.disabled = isApplying;
+        btn.style.pointerEvents = isApplying ? 'none' : '';
+        btn.style.opacity = isApplying ? '0.5' : '';
+      });
+
+      if (state === 'idle') {
+        constraintActionBtn.textContent = 'Preview';
+        constraintActionBtn.className = '';
+        constraintActionBtn.disabled = false;
+        constraintCancelBtn.style.display = 'none';
+        setProgress(0);
+      } else if (state === 'preview') {
+        constraintActionBtn.className = 'confirm';
+        constraintActionBtn.disabled = false;
+        constraintCancelBtn.style.display = '';
+      } else if (state === 'applying') {
+        constraintActionBtn.textContent = 'In Progress...';
+        constraintActionBtn.className = '';
+        constraintActionBtn.disabled = true;
+        constraintCancelBtn.style.display = 'none';
+      }
+    }
+
+    function resetAllState() {
+      // Reset importer
+      pendingImport = null;
+      isCancelled = true;
+      setAppState('idle');
+      fileInput.value = '';
+
+      // Reset utils
+      utilsState = 'idle';
+      constraintActionBtn.textContent = 'Preview';
+      constraintActionBtn.className = '';
+      constraintActionBtn.disabled = false;
+      constraintCancelBtn.style.display = 'none';
+      constraintXSel.disabled = false;
+      constraintYSel.disabled = false;
+      constraintXSel.value = 'MIN';
+      constraintYSel.value = 'MIN';
+      parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
+
+      // Unblock tabs
+      tabBtns.forEach(btn => {
+        btn.disabled = false;
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+      });
+    }
+
+    constraintActionBtn.addEventListener('click', () => {
+      if (utilsState === 'idle') {
+        parent.postMessage({
+          pluginMessage: { type: 'preview-constraints' }
+        }, '*');
+      } else if (utilsState === 'preview') {
+        setUtilsState('applying');
+        parent.postMessage({
+          pluginMessage: {
+            type: 'apply-constraints',
+            x: constraintXSel.value,
+            y: constraintYSel.value
+          }
+        }, '*');
+      }
+    });
+
+    constraintCancelBtn.addEventListener('click', () => {
+      setUtilsState('idle');
+      parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
+      log('Cancelled', 'info');
+    });
+
     // Format time in 24h format
     function formatTime() {
       const now = new Date();
@@ -429,7 +712,7 @@
       const s = String(now.getSeconds()).padStart(2, '0');
       return `${h}:${m}:${s}`;
     }
-    
+
     function log(message, type = '') {
       const entry = document.createElement('div');
       entry.className = `log-entry ${type}`;
@@ -441,16 +724,15 @@
     function setProgress(percent) {
       progressBar.style.width = `${percent}%`;
     }
-    
+
     function setStats(text) {
       statsEl.textContent = text;
     }
-    
+
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
-    
-    
+
 
     function parseEmojiFromName(name) {
       try {
@@ -481,7 +763,7 @@
       const [category, name, theme, state] = parts;
       return { category, name, theme, state };
     }
-    
+
     actionBtn.addEventListener('click', () => {
       if (appState === 'processing') {
         isCancelled = true;
@@ -757,7 +1039,7 @@
       updateStats();
       setAppState('idle');
     }
-    
+
     function readFileAsBytes(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -766,7 +1048,7 @@
         reader.readAsArrayBuffer(file);
       });
     }
-    
+
     function getImageDimensions(file) {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -778,7 +1060,7 @@
         img.src = URL.createObjectURL(file);
       });
     }
-    
+
     // Promise for waiting component creation
     let componentCreatedResolve = null;
 
@@ -802,6 +1084,12 @@
 
       if (msg.type === 'page-info') {
         document.getElementById('pageName').textContent = msg.name;
+      } else if (msg.type === 'selection-info') {
+        if (msg.count === 0) {
+          selectionInfoEl.textContent = '0';
+        } else {
+          selectionInfoEl.textContent = `${msg.count} (${msg.names.join(', ')})`;
+        }
       } else if (msg.type === 'log') {
         log(msg.message, msg.level || '');
       } else if (msg.type === 'rescan-done') {
@@ -818,6 +1106,29 @@
           });
           componentCreatedResolve = null;
         }
+      } else if (msg.type === 'constraints-preview') {
+        if (msg.count === 0) {
+          log('No constrainable layers found at deepest level', 'warn');
+          setUtilsState('idle');
+        } else {
+          for (const path of msg.paths) {
+            log(path, 'info');
+          }
+          log(`\nFound ${msg.count} layers to modify`, 'info');
+          constraintActionBtn.textContent = `Apply to ${msg.count} layers`;
+          setUtilsState('preview');
+        }
+      } else if (msg.type === 'constraint-progress') {
+        setProgress((msg.current / msg.total) * 100);
+        setStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
+      } else if (msg.type === 'constraints-done') {
+        if (msg.errors > 0) {
+          log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
+        } else {
+          log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
+        }
+        setStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
+        setUtilsState('idle');
       }
     };
   </script>

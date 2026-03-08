@@ -70,14 +70,66 @@ function isComponentExists(name) {
 }
 
 // Show UI
-figma.showUI(__html__, { width: 440, height: 520, title: 'Icon Importer v0.51' });
+figma.showUI(__html__, { width: 440, height: 560, title: 'SPAK Figma Toolkit v0.6' });
 
 // Send current page name to UI
 figma.ui.postMessage({ type: 'page-info', name: figma.currentPage.name });
 
+// Send selection info to UI
+function sendSelectionInfo() {
+  const sel = figma.currentPage.selection;
+  const names = sel.map(n => n.name);
+  figma.ui.postMessage({ type: 'selection-info', count: sel.length, names });
+}
+sendSelectionInfo();
+
+figma.on('selectionchange', sendSelectionInfo);
+
 // Scan existing components on startup
 const existingCount = scanExistingComponents();
 log(`Found ${existingCount} existing components on page`, 'info');
+
+// Constraint editing
+let pendingConstraintLayers = [];
+
+function getNodePath(node, rootNode) {
+  const parts = [];
+  let current = node;
+  while (current && current.id !== rootNode.id) {
+    parts.unshift(current.name);
+    current = current.parent;
+  }
+  parts.unshift(rootNode.name);
+  return parts.join(' / ');
+}
+
+function findDeepestConstrainableLayers(rootNode) {
+  function getMaxDepth(node, depth) {
+    if (!('children' in node) || node.children.length === 0) return depth;
+    let maxD = depth;
+    for (const child of node.children) {
+      maxD = Math.max(maxD, getMaxDepth(child, depth + 1));
+    }
+    return maxD;
+  }
+
+  const maxDepth = getMaxDepth(rootNode, 0);
+
+  function collectAtDepth(node, depth) {
+    if (depth === maxDepth) {
+      if ('constraints' in node) return [node];
+      return [];
+    }
+    if (!('children' in node)) return [];
+    let result = [];
+    for (const child of node.children) {
+      result = result.concat(collectAtDepth(child, depth + 1));
+    }
+    return result;
+  }
+
+  return collectAtDepth(rootNode, 0);
+}
 
 // Handle messages from UI
 figma.ui.onmessage = async (msg) => {
@@ -87,6 +139,52 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.postMessage({ type: 'rescan-done' });
   } else if (msg.type === 'create-icon') {
     await createIconComponent(msg);
+  } else if (msg.type === 'preview-constraints') {
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      log('No layers selected', 'warn');
+      figma.ui.postMessage({ type: 'constraints-preview', count: 0, paths: [] });
+      return;
+    }
+
+    pendingConstraintLayers = [];
+    for (const selNode of selection) {
+      const layers = findDeepestConstrainableLayers(selNode);
+      for (const layer of layers) {
+        pendingConstraintLayers.push({ node: layer, path: getNodePath(layer, selNode) });
+      }
+    }
+
+    const paths = pendingConstraintLayers.map(l => l.path);
+    log(`\n🔍 Preview: scanning ${selection.length} selected elements...`, 'info');
+    figma.ui.postMessage({ type: 'constraints-preview', count: pendingConstraintLayers.length, paths });
+
+  } else if (msg.type === 'apply-constraints') {
+    const total = pendingConstraintLayers.length;
+    let errors = 0;
+
+    log(`\n▶ Applying constraints (X: ${msg.x}, Y: ${msg.y}) to ${total} layers...`, 'info');
+
+    for (let i = 0; i < total; i++) {
+      const { node, path } = pendingConstraintLayers[i];
+      try {
+        node.constraints = { horizontal: msg.x, vertical: msg.y };
+        log(`  ✓ ${path}`, 'success');
+      } catch (err) {
+        errors++;
+        log(`  ✗ ${path}: ${err.message}`, 'error');
+      }
+      figma.ui.postMessage({ type: 'constraint-progress', current: i + 1, total, errors });
+      if (i < total - 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+
+    pendingConstraintLayers = [];
+    figma.ui.postMessage({ type: 'constraints-done', total, errors });
+
+  } else if (msg.type === 'cancel-constraints') {
+    pendingConstraintLayers = [];
   }
 };
 
