@@ -1,5 +1,5 @@
-// Capitalize first letter utility
-function capitalize(str) {
+// Capitalize first letter of each word
+function capitalizeWords(str) {
   if (!str) return str;
   return str.split(' ').map(word => {
     const cp = [...word];
@@ -40,28 +40,19 @@ let existingComponentNames = new Set();
 
 function scanExistingComponents() {
   existingComponentNames.clear();
-  
-  // Find all ComponentSets on current page
-  const componentSets = figma.currentPage.findAllWithCriteria({
-    types: ['COMPONENT_SET']
-  });
-  
-  for (const cs of componentSets) {
-    existingComponentNames.add(cs.name);
-  }
-  
-  // Also find standalone components (for single-variant icons)
-  const components = figma.currentPage.findAllWithCriteria({
-    types: ['COMPONENT']
-  });
-  
-  for (const c of components) {
-    // Only top-level components (not inside ComponentSet)
-    if (c.parent === figma.currentPage || (c.parent && c.parent.type !== 'COMPONENT_SET')) {
-      existingComponentNames.add(c.name);
+
+  const nodes = figma.currentPage.findAll(node =>
+    node.type === 'COMPONENT_SET' || node.type === 'COMPONENT'
+  );
+
+  for (const node of nodes) {
+    if (node.type === 'COMPONENT_SET') {
+      existingComponentNames.add(node.name);
+    } else if (node.parent === figma.currentPage || (node.parent && node.parent.type !== 'COMPONENT_SET')) {
+      existingComponentNames.add(node.name);
     }
   }
-  
+
   return existingComponentNames.size;
 }
 
@@ -607,7 +598,7 @@ function configureComponentSet(componentSet, createdVariants, sortedThemes, sort
 
 async function createIconComponent({ category, name, themes, states, variants, position, hasProblems, iconWidth, iconHeight, onlyDefaultState, noThemes }) {
   const sizeSuffix = (iconWidth !== iconHeight) ? ` ${iconWidth}x${iconHeight}` : '';
-  const componentName = `Icon / ${capitalize(category)} / ${capitalize(name)}${sizeSuffix}`;
+  const componentName = `Icon / ${capitalizeWords(category)} / ${capitalizeWords(name)}${sizeSuffix}`;
 
   if (isComponentExists(componentName)) {
     log(`⏭️ Skipped (already exists): ${componentName}`, 'warn');

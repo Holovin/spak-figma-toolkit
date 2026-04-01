@@ -611,7 +611,7 @@
       const sep = separatorInput.value || '_';
       formatHint.textContent = `[category]${sep}[name]${sep}[theme]${sep}[state].png`;
     }
-    function capitalize(str) {
+    function capitalizeToken(str) {
       const cp = [...str];
       if (!cp.length) return str;
       return cp[0].toUpperCase() + cp.slice(1).join('').toLowerCase();
@@ -635,7 +635,7 @@
         }
       }
       const emojiOutputEl = document.getElementById('previewEmojiOutput');
-      emojiOutputEl.textContent = `Icon / Emoji / ${capitalize(emojiDisplay)}`;
+      emojiOutputEl.textContent = `Icon / Emoji / ${capitalizeToken(emojiDisplay)}`;
       emojiOutputEl.className = 'preview-output' + (emojiChanged ? ' changed' : '');
 
       // On/off example
@@ -724,6 +724,10 @@
       });
     }
 
+    function sendToPlugin(message) {
+      parent.postMessage({ pluginMessage: message }, '*');
+    }
+
     function updateDefaultStatsForActiveTab() {
       if (activeTab === 'importer') {
         setStats('Choose a folder with icons');
@@ -762,6 +766,14 @@
           setStats('Scanning selection for matching icon instances...');
         }
       }
+    }
+
+    function refreshIdleStats() {
+      updateDefaultStatsForActiveTab();
+    }
+
+    function setProgressStats(text) {
+      setStats(text);
     }
 
     // Constraints state management
@@ -943,13 +955,11 @@
         updateDefaultStatsForActiveTab();
       }
 
-      parent.postMessage({
-        pluginMessage: {
-          type: 'scan-icon-props',
-          includePrefix: iconIncludePrefixInput.value,
-          excludePrefix: iconExcludePrefixInput.value
-        }
-      }, '*');
+      sendToPlugin({
+        type: 'scan-icon-props',
+        includePrefix: iconIncludePrefixInput.value,
+        excludePrefix: iconExcludePrefixInput.value
+      });
     }
 
     function scanConstraints() {
@@ -960,11 +970,7 @@
         updateDefaultStatsForActiveTab();
       }
 
-      parent.postMessage({
-        pluginMessage: {
-          type: 'scan-constraints'
-        }
-      }, '*');
+      sendToPlugin({ type: 'scan-constraints' });
     }
 
     function setIconPropsState(state) {
@@ -1022,38 +1028,44 @@
       constraintYSel.value = 'MIN';
       applyConstraintScanToControls(null);
       setConstraintsState('idle');
-      parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
+      sendToPlugin({ type: 'cancel-constraints' });
 
       // Reset icon props
       currentIconScan = null;
       setIconPropsState('idle');
-      parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
+      sendToPlugin({ type: 'cancel-icon-props' });
 
       // Unblock tabs
       setTabAvailability(false);
     }
 
+    function cancelConstraintsPreview(message) {
+      setConstraintsState('idle');
+      sendToPlugin({ type: 'cancel-constraints' });
+      if (message) log(message, 'info');
+    }
+
+    function cancelIconPreview(message) {
+      setIconPropsState('idle');
+      sendToPlugin({ type: 'cancel-icon-props' });
+      if (message) log(message, 'info');
+    }
+
     constraintActionBtn.addEventListener('click', () => {
       if (constraintsState === 'idle') {
-        parent.postMessage({
-          pluginMessage: { type: 'preview-constraints' }
-        }, '*');
+        sendToPlugin({ type: 'preview-constraints' });
       } else if (constraintsState === 'preview') {
         setConstraintsState('applying');
-        parent.postMessage({
-          pluginMessage: {
-            type: 'apply-constraints',
-            x: constraintXSel.value,
-            y: constraintYSel.value
-          }
-        }, '*');
+        sendToPlugin({
+          type: 'apply-constraints',
+          x: constraintXSel.value,
+          y: constraintYSel.value
+        });
       }
     });
 
     constraintCancelBtn.addEventListener('click', () => {
-      setConstraintsState('idle');
-      parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
-      log('Cancelled', 'info');
+      cancelConstraintsPreview('Cancelled');
     });
 
     constraintXSel.addEventListener('change', updateConstraintActionAvailability);
@@ -1081,13 +1093,11 @@
           return;
         }
 
-        parent.postMessage({
-          pluginMessage: {
-            type: 'preview-icon-props',
-            includePrefix: iconIncludePrefixInput.value,
-            excludePrefix: iconExcludePrefixInput.value
-          }
-        }, '*');
+        sendToPlugin({
+          type: 'preview-icon-props',
+          includePrefix: iconIncludePrefixInput.value,
+          excludePrefix: iconExcludePrefixInput.value
+        });
       } else if (iconPropsState === 'preview') {
         const theme = iconThemeSel.value;
         const state = iconStateSel.value;
@@ -1098,20 +1108,16 @@
         }
 
         setIconPropsState('applying');
-        parent.postMessage({
-          pluginMessage: {
-            type: 'apply-icon-props',
-            theme,
-            state
-          }
-        }, '*');
+        sendToPlugin({
+          type: 'apply-icon-props',
+          theme,
+          state
+        });
       }
     });
 
     iconCancelBtn.addEventListener('click', () => {
-      setIconPropsState('idle');
-      parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
-      log('Cancelled', 'info');
+      cancelIconPreview('Cancelled');
     });
 
     setConstraintsState('idle');
@@ -1178,6 +1184,99 @@
       return { category, name, theme, state };
     }
 
+    function buildImportPreview(files, options) {
+      const { separator, parseEmojiNames, detectOffPattern } = options;
+      const groups = {};
+      const parsedFiles = [];
+      let invalidCount = 0;
+
+      for (const file of files) {
+        const parsed = parseName(file.name, separator);
+        if (!parsed) {
+          invalidCount++;
+          continue;
+        }
+
+        let { category, name, theme, state } = parsed;
+        let isOffVariant = false;
+        let baseName = name;
+
+        if (detectOffPattern && name.endsWith('_off')) {
+          isOffVariant = true;
+          baseName = name.slice(0, -4);
+        }
+
+        if (parseEmojiNames) {
+          const parsedEmoji = parseEmojiFromName(baseName);
+          if (parsedEmoji) {
+            baseName = parsedEmoji.name ? `${parsedEmoji.emoji} ${parsedEmoji.name} (${baseName})` : `${parsedEmoji.emoji} ${baseName}`;
+          }
+        }
+
+        parsedFiles.push({ file, category, name, baseName, theme, state, isOffVariant });
+      }
+
+      const onVariantKeys = new Set();
+      for (const parsedFile of parsedFiles) {
+        if (!parsedFile.isOffVariant) {
+          onVariantKeys.add(`${parsedFile.category}\0${parsedFile.baseName}\0${parsedFile.theme}`);
+        }
+      }
+
+      const offPatternGroups = new Set();
+      for (const parsedFile of parsedFiles) {
+        if (parsedFile.isOffVariant && onVariantKeys.has(`${parsedFile.category}\0${parsedFile.baseName}\0${parsedFile.theme}`)) {
+          offPatternGroups.add(`${parsedFile.category}${separator}${parsedFile.baseName}`);
+        }
+      }
+
+      for (const parsedFile of parsedFiles) {
+        const groupKey = `${parsedFile.category}${separator}${parsedFile.baseName}`;
+        const usesOffPattern = offPatternGroups.has(groupKey);
+
+        let effectiveName = parsedFile.baseName;
+        let effectiveState = parsedFile.state;
+
+        if (usesOffPattern) {
+          if (parsedFile.theme !== 'light') continue;
+          effectiveState = parsedFile.isOffVariant ? 'off' : 'on';
+        } else if (parsedFile.isOffVariant) {
+          effectiveName = parsedFile.name;
+        }
+
+        const actualGroupKey = `${parsedFile.category}${separator}${effectiveName}`;
+        if (!groups[actualGroupKey]) {
+          groups[actualGroupKey] = {
+            category: parsedFile.category,
+            name: effectiveName,
+            themes: new Set(),
+            states: new Set(),
+            files: {},
+            usesOffPattern
+          };
+        }
+
+        if (!usesOffPattern) groups[actualGroupKey].themes.add(parsedFile.theme);
+        groups[actualGroupKey].states.add(effectiveState);
+        groups[actualGroupKey].files[`${parsedFile.theme}${separator}${effectiveState}`] = parsedFile.file;
+      }
+
+      const categories = {};
+      for (const group of Object.values(groups)) {
+        if (!categories[group.category]) categories[group.category] = [];
+        categories[group.category].push(group);
+      }
+
+      return {
+        groups,
+        categories,
+        categoryNames: Object.keys(categories),
+        totalIcons: Object.keys(groups).length,
+        invalidCount,
+        offPatternCount: offPatternGroups.size
+      };
+    }
+
     actionBtn.addEventListener('click', () => {
       if (appState === 'processing') {
         isCancelled = true;
@@ -1193,8 +1292,8 @@
     fileInput.addEventListener('change', (e) => {
       const files = Array.from(e.target.files).filter(f => f.name.toLowerCase().endsWith('.png'));
       const separator = separatorInput.value || '_';
-      const parseEmojiNamesOpt = parseEmojiCheck.checked;
-      const detectOffPatternOpt = detectOffCheck.checked;
+      const parseEmojiNames = parseEmojiCheck.checked;
+      const detectOffPattern = detectOffCheck.checked;
 
       if (files.length === 0) {
         log('No PNG files found', 'error');
@@ -1203,94 +1302,35 @@
 
       log(`\n📁 Found ${files.length} PNG files (separator: "${separator}")`, 'info');
 
-      const groups = {};
-      const parsedFiles = [];
-      let invalidCount = 0;
+      const preview = buildImportPreview(files, {
+        separator,
+        parseEmojiNames,
+        detectOffPattern
+      });
 
-      for (const file of files) {
-        const parsed = parseName(file.name, separator);
-        if (!parsed) { invalidCount++; continue; }
-
-        let { category, name, theme, state } = parsed;
-        let isOffVariant = false;
-        let baseName = name;
-
-        if (detectOffPatternOpt && name.endsWith('_off')) {
-          isOffVariant = true;
-          baseName = name.slice(0, -4);
-        }
-        if (parseEmojiNamesOpt) {
-          const parsed = parseEmojiFromName(baseName);
-          if (parsed) baseName = parsed.name ? `${parsed.emoji} ${parsed.name} (${baseName})` : `${parsed.emoji} ${baseName}`;
-        }
-
-        parsedFiles.push({ file, category, name, baseName, theme, state, isOffVariant });
+      if (preview.invalidCount > 0) {
+        log(`⚠️ Skipped ${preview.invalidCount} files (invalid name format)`, 'warn');
       }
 
-      if (invalidCount > 0) {
-        log(`⚠️ Skipped ${invalidCount} files (invalid name format)`, 'warn');
+      if (detectOffPattern && preview.offPatternCount > 0) {
+        log(`Found ${preview.offPatternCount} icon groups using on/off pattern`, 'info');
       }
 
-      // Build a Set of "on" variant keys for O(1) lookup
-      const onVariantKeys = new Set();
-      for (const pf of parsedFiles) {
-        if (!pf.isOffVariant) {
-          onVariantKeys.add(`${pf.category}\0${pf.baseName}\0${pf.theme}`);
-        }
-      }
-      const offPatternGroups = new Set();
-      for (const pf of parsedFiles) {
-        if (pf.isOffVariant && onVariantKeys.has(`${pf.category}\0${pf.baseName}\0${pf.theme}`)) {
-          offPatternGroups.add(`${pf.category}${separator}${pf.baseName}`);
-        }
+      log(`Grouped into ${preview.totalIcons} icons across ${preview.categoryNames.length} categories:`, 'info');
+      for (const catName of preview.categoryNames) {
+        log(`  📂 ${catName}: ${preview.categories[catName].length} icons`, 'info');
       }
 
-      if (detectOffPatternOpt && offPatternGroups.size > 0) {
-        log(`Found ${offPatternGroups.size} icon groups using on/off pattern`, 'info');
-      }
-
-      for (const pf of parsedFiles) {
-        const groupKey = `${pf.category}${separator}${pf.baseName}`;
-        const usesOffPattern = offPatternGroups.has(groupKey);
-
-        let effectiveName = pf.baseName;
-        let effectiveState = pf.state;
-
-        if (usesOffPattern) {
-          if (pf.theme !== 'light') continue;
-          effectiveState = pf.isOffVariant ? 'off' : 'on';
-        } else if (pf.isOffVariant) {
-          effectiveName = pf.name;
-        }
-
-        const actualGroupKey = `${pf.category}${separator}${effectiveName}`;
-        if (!groups[actualGroupKey]) {
-          groups[actualGroupKey] = {
-            category: pf.category, name: effectiveName,
-            themes: new Set(), states: new Set(), files: {}, usesOffPattern
-          };
-        }
-        if (!usesOffPattern) groups[actualGroupKey].themes.add(pf.theme);
-        groups[actualGroupKey].states.add(effectiveState);
-        groups[actualGroupKey].files[`${pf.theme}${separator}${effectiveState}`] = pf.file;
-      }
-
-      const categories = {};
-      for (const [, group] of Object.entries(groups)) {
-        if (!categories[group.category]) categories[group.category] = [];
-        categories[group.category].push({ ...group });
-      }
-
-      const categoryNames = Object.keys(categories);
-      const totalIcons = Object.keys(groups).length;
-
-      log(`Grouped into ${totalIcons} icons across ${categoryNames.length} categories:`, 'info');
-      for (const catName of categoryNames) {
-        log(`  📂 ${catName}: ${categories[catName].length} icons`, 'info');
-      }
-
-      setStats(`Ready: ${totalIcons} icons across ${categoryNames.length} categories`);
-      pendingImport = { groups, categories, categoryNames, totalIcons, totalFiles: files.length, separator, retinaMode: retinaModeCheck.checked };
+      setProgressStats(`Ready: ${preview.totalIcons} icons across ${preview.categoryNames.length} categories`);
+      pendingImport = {
+        groups: preview.groups,
+        categories: preview.categories,
+        categoryNames: preview.categoryNames,
+        totalIcons: preview.totalIcons,
+        totalFiles: files.length,
+        separator,
+        retinaMode: retinaModeCheck.checked
+      };
       setAppState('preview');
       fileInput.value = '';
     });
@@ -1315,7 +1355,7 @@
       let currentY = 0;
 
       function updateStats() {
-        setStats(`Files processed: ${processedFiles}/${totalFiles} (errors: ${errorCount}), new icons: ${createdCount}, skipped: ${skippedCount}`);
+        setProgressStats(`Files processed: ${processedFiles}/${totalFiles} (errors: ${errorCount}), new icons: ${createdCount}, skipped: ${skippedCount}`);
       }
       updateStats();
 
@@ -1404,15 +1444,13 @@
           }
 
           if (variantsData.length > 0) {
-            parent.postMessage({
-              pluginMessage: {
-                type: 'create-icon',
-                category: group.category, name: group.name,
-                themes: noThemes ? [] : themes, states: effectiveStates,
-                variants: variantsData, position: { x: currentX, y: currentY },
-                hasProblems, iconWidth, iconHeight, onlyDefaultState, noThemes
-              }
-            }, '*');
+            sendToPlugin({
+              type: 'create-icon',
+              category: group.category, name: group.name,
+              themes: noThemes ? [] : themes, states: effectiveStates,
+              variants: variantsData, position: { x: currentX, y: currentY },
+              hasProblems, iconWidth, iconHeight, onlyDefaultState, noThemes
+            });
 
             const componentResult = await waitForComponentCreated();
             if (componentResult.skipped) {
@@ -1490,151 +1528,190 @@
     let rescanDoneResolve = null;
 
     function rescanComponents() {
-      parent.postMessage({ pluginMessage: { type: 'rescan-components' } }, '*');
+      sendToPlugin({ type: 'rescan-components' });
       return new Promise(resolve => { rescanDoneResolve = resolve; });
     }
+
+    function handlePageInfo(msg) {
+      document.getElementById('pageName').textContent = msg.name;
+    }
+
+    function handleSelectionInfo(msg) {
+      currentSelectionCount = msg.count;
+      selectionInfoEl.textContent = msg.count === 0 ? '0' : `${msg.count} (${msg.names.join(', ')})`;
+
+      if (activeTab === 'constraints' && constraintsState !== 'applying') {
+        if (constraintsState === 'preview') {
+          cancelConstraintsPreview('Selection changed. Constraints preview reset.');
+        }
+        scanConstraints();
+      }
+
+      if (activeTab === 'icons' && iconPropsState !== 'applying') {
+        if (iconPropsState === 'preview') {
+          cancelIconPreview('Selection changed. Icon preview reset.');
+        }
+        scanIconProps();
+      }
+    }
+
+    function handlePluginLog(msg) {
+      log(msg.message, msg.level || '');
+    }
+
+    function handleRescanDone() {
+      if (rescanDoneResolve) {
+        rescanDoneResolve();
+        rescanDoneResolve = null;
+      }
+    }
+
+    function handleComponentCreated(msg) {
+      if (componentCreatedResolve) {
+        componentCreatedResolve({
+          width: msg.width,
+          height: msg.height,
+          skipped: msg.skipped || false
+        });
+        componentCreatedResolve = null;
+      }
+    }
+
+    function handleConstraintsScanned(msg) {
+      applyConstraintScanToControls({
+        count: msg.count,
+        currentX: msg.currentX || '',
+        currentY: msg.currentY || ''
+      });
+
+      if (constraintsState === 'idle') {
+        refreshIdleStats();
+      }
+    }
+
+    function handleConstraintsPreview(msg) {
+      if (msg.count === 0) {
+        applyConstraintScanToControls({ count: 0, currentX: '', currentY: '' });
+        setConstraintsState('idle');
+        return;
+      }
+
+      currentConstraintScan = {
+        count: msg.count,
+        currentX: currentConstraintScan && currentConstraintScan.currentX ? currentConstraintScan.currentX : '',
+        currentY: currentConstraintScan && currentConstraintScan.currentY ? currentConstraintScan.currentY : ''
+      };
+
+      for (const path of msg.paths) {
+        log(path, 'info');
+      }
+
+      log(`\nFound ${msg.count} layers to modify`, 'info');
+      constraintActionBtn.textContent = `Apply to ${msg.count} layers`;
+      setConstraintsState('preview');
+    }
+
+    function handleConstraintProgress(msg) {
+      setProgress((msg.current / msg.total) * 100);
+      setProgressStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
+    }
+
+    function handleConstraintsDone(msg) {
+      if (msg.errors > 0) {
+        log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
+      } else {
+        log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
+      }
+      setProgressStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
+      setConstraintsState('idle');
+    }
+
+    function handleIconPropsScanned(msg) {
+      applyIconScanToControls({
+        count: msg.count,
+        themeOptions: msg.themeOptions || [],
+        stateOptions: msg.stateOptions || [],
+        currentTheme: msg.currentTheme || '',
+        currentState: msg.currentState || ''
+      });
+
+      if (iconPropsState === 'idle' && msg.count > 0) {
+        const availableThemes = (msg.themeOptions || []).map(option => option.value);
+        const availableStates = (msg.stateOptions || []).map(option => option.value);
+
+        log(`Icon scan: ${msg.count} matches`, 'info');
+        log(`Available themes: ${availableThemes.length ? availableThemes.join(', ') : 'none'}`, availableThemes.length ? 'info' : 'warn');
+        log('Selected themes:', 'info');
+        for (const group of (msg.themeGroups || [])) {
+          log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
+        }
+        log(`Available states: ${availableStates.length ? availableStates.join(', ') : 'none'}`, availableStates.length ? 'info' : 'warn');
+        log('Selected states:', 'info');
+        for (const group of (msg.stateGroups || [])) {
+          log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
+        }
+      }
+
+      if (iconPropsState === 'idle') {
+        refreshIdleStats();
+      }
+    }
+
+    function handleIconPropsPreview(msg) {
+      if (msg.count === 0) {
+        setIconPropsState('idle');
+        return;
+      }
+
+      pendingIconProps = { count: msg.count };
+      setProgressStats(`Found ${msg.count} matching icon instances`);
+      setIconPropsState('preview');
+    }
+
+    function handleIconPropsProgress(msg) {
+      setProgress((msg.current / msg.total) * 100);
+      setProgressStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
+    }
+
+    function handleIconPropsDone(msg) {
+      if (msg.skipped) {
+        setProgressStats('Choose theme and/or state before applying');
+        setIconPropsState('preview');
+        return;
+      }
+
+      if (msg.errors > 0) {
+        log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
+      } else {
+        log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
+      }
+      setProgressStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
+      setIconPropsState('idle');
+    }
+
+    const messageHandlers = {
+      'page-info': handlePageInfo,
+      'selection-info': handleSelectionInfo,
+      'log': handlePluginLog,
+      'rescan-done': handleRescanDone,
+      'component-created': handleComponentCreated,
+      'constraints-scanned': handleConstraintsScanned,
+      'constraints-preview': handleConstraintsPreview,
+      'constraint-progress': handleConstraintProgress,
+      'constraints-done': handleConstraintsDone,
+      'icon-props-scanned': handleIconPropsScanned,
+      'icon-props-preview': handleIconPropsPreview,
+      'icon-props-progress': handleIconPropsProgress,
+      'icon-props-done': handleIconPropsDone
+    };
 
     // Messages from plugin
     window.onmessage = (e) => {
       const msg = e.data.pluginMessage;
       if (!msg) return;
 
-      if (msg.type === 'page-info') {
-        document.getElementById('pageName').textContent = msg.name;
-      } else if (msg.type === 'selection-info') {
-        currentSelectionCount = msg.count;
-        if (msg.count === 0) {
-          selectionInfoEl.textContent = '0';
-        } else {
-          selectionInfoEl.textContent = `${msg.count} (${msg.names.join(', ')})`;
-        }
-
-        if (activeTab === 'constraints' && constraintsState !== 'applying') {
-          if (constraintsState === 'preview') {
-            setConstraintsState('idle');
-            parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
-            log('Selection changed. Constraints preview reset.', 'info');
-          }
-          scanConstraints();
-        }
-
-        if (activeTab === 'icons' && iconPropsState !== 'applying') {
-          if (iconPropsState === 'preview') {
-            setIconPropsState('idle');
-            parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
-            log('Selection changed. Icon preview reset.', 'info');
-          }
-          scanIconProps();
-        }
-      } else if (msg.type === 'log') {
-        log(msg.message, msg.level || '');
-      } else if (msg.type === 'rescan-done') {
-        if (rescanDoneResolve) {
-          rescanDoneResolve();
-          rescanDoneResolve = null;
-        }
-      } else if (msg.type === 'component-created') {
-        if (componentCreatedResolve) {
-          componentCreatedResolve({
-            width: msg.width,
-            height: msg.height,
-            skipped: msg.skipped || false
-          });
-          componentCreatedResolve = null;
-        }
-      } else if (msg.type === 'constraints-scanned') {
-        applyConstraintScanToControls({
-          count: msg.count,
-          currentX: msg.currentX || '',
-          currentY: msg.currentY || ''
-        });
-        if (constraintsState === 'idle') {
-          updateDefaultStatsForActiveTab();
-        }
-      } else if (msg.type === 'constraints-preview') {
-        if (msg.count === 0) {
-          applyConstraintScanToControls({ count: 0, currentX: '', currentY: '' });
-          setConstraintsState('idle');
-        } else {
-          currentConstraintScan = {
-            count: msg.count,
-            currentX: currentConstraintScan && currentConstraintScan.currentX ? currentConstraintScan.currentX : '',
-            currentY: currentConstraintScan && currentConstraintScan.currentY ? currentConstraintScan.currentY : ''
-          };
-          for (const path of msg.paths) {
-            log(path, 'info');
-          }
-          log(`\nFound ${msg.count} layers to modify`, 'info');
-          constraintActionBtn.textContent = `Apply to ${msg.count} layers`;
-          setConstraintsState('preview');
-        }
-      } else if (msg.type === 'constraint-progress') {
-        setProgress((msg.current / msg.total) * 100);
-        setStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
-      } else if (msg.type === 'constraints-done') {
-        if (msg.errors > 0) {
-          log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
-        } else {
-          log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
-        }
-        setStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
-        setConstraintsState('idle');
-      } else if (msg.type === 'icon-props-scanned') {
-        applyIconScanToControls({
-          count: msg.count,
-          themeOptions: msg.themeOptions || [],
-          stateOptions: msg.stateOptions || [],
-          currentTheme: msg.currentTheme || '',
-          currentState: msg.currentState || ''
-        });
-
-        if (iconPropsState === 'idle' && msg.count > 0) {
-          const availableThemes = (msg.themeOptions || []).map(option => option.value);
-          const availableStates = (msg.stateOptions || []).map(option => option.value);
-
-          log(`Icon scan: ${msg.count} matches`, 'info');
-          log(`Available themes: ${availableThemes.length ? availableThemes.join(', ') : 'none'}`, availableThemes.length ? 'info' : 'warn');
-          log('Selected themes:', 'info');
-          for (const group of (msg.themeGroups || [])) {
-            log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
-          }
-          log(`Available states: ${availableStates.length ? availableStates.join(', ') : 'none'}`, availableStates.length ? 'info' : 'warn');
-          log('Selected states:', 'info');
-          for (const group of (msg.stateGroups || [])) {
-            log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
-          }
-        }
-
-        if (iconPropsState === 'idle') {
-          updateDefaultStatsForActiveTab();
-        }
-      } else if (msg.type === 'icon-props-preview') {
-        if (msg.count === 0) {
-          setIconPropsState('idle');
-        } else {
-          pendingIconProps = {
-            count: msg.count
-          };
-          setStats(`Found ${msg.count} matching icon instances`);
-          setIconPropsState('preview');
-        }
-      } else if (msg.type === 'icon-props-progress') {
-        setProgress((msg.current / msg.total) * 100);
-        setStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
-      } else if (msg.type === 'icon-props-done') {
-        if (msg.skipped) {
-          setStats('Choose theme and/or state before applying');
-          setIconPropsState('preview');
-        } else {
-          if (msg.errors > 0) {
-            log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
-          } else {
-            log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
-          }
-          setStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
-          setIconPropsState('idle');
-        }
-      }
+      const handler = messageHandlers[msg.type];
+      if (handler) handler(msg);
     };
   </script>
 </body>
