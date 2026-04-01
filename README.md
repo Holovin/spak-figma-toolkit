@@ -1,4 +1,5 @@
 # SPAK Figma Toolkit
+<img width="473" height="619" alt="image" src="https://github.com/user-attachments/assets/18342881-f224-4e1b-962a-6c95c7ce7525" />
 <img width="929" height="634" alt="image" src="https://github.com/user-attachments/assets/93a8e65c-5013-4687-8488-23973c8b4626" />
 
 
@@ -77,50 +78,3 @@ Include: Icon /
 Exclude: Icon / Head /, Icon / Emoji
 ```
 
-### Selection behavior
-
-- Scan is automatic while the `Icons` tab is open.
-- The status line shows how many matching icon instances were found.
-- `Theme` and `State` selects are filled from the matched icons.
-- Values available for all matched icons are selectable.
-- Values available only for some matched icons are shown as `(partial)` and remain disabled.
-- If all matched icons currently use the same `Theme` or `State`, that value is auto-selected and marked as `(current)`.
-- Names shown in scan logs are trimmed by the `Include` prefix. For example, `Icon / Acl / All16` is shown as `Acl / All16`.
-
-### Scan logs
-
-The shared console logs scan results in this format:
-
-```text
-Available themes: light, dark
-Selected themes:
--- dark: Acl / All16, Search / 16
-
-Available states: default, black
-Selected states:
--- default: Acl / All16
--- black: Search / 16
-```
-
-### Apply flow
-
-1. Select one or more containers, components, slots, or frames in Figma.
-2. Open the `Icons` tab.
-3. Adjust `Include` / `Exclude` filters if needed.
-4. Choose a target `Theme`, `State`, or both.
-5. Click `Preview`.
-6. Click `Apply` to update all previewed icon instances, or `Cancel` to discard the preview.
-
-All important scan, preview, and apply actions are written to the shared console.
-
----
-
-### TODO
-- [x] Basic import
-- [x] Component groups & auto layout for same icons
-- [x] Bad/Corrupted/Missed icons highlighting
-- [x] Logging & Progressbar
-- [x] Small delay for prevent rate limit error
-- [x] Prioritization of themes and colors
-- [ ] Read & update already existing icons
-- [ ] Full filename customization
