@@ -70,10 +70,11 @@ function isComponentExists(name) {
 }
 
 // Show UI
-figma.showUI(__html__, { width: 440, height: 560, title: 'SPAK Figma Toolkit v0.6' });
+figma.showUI(__html__, { width: 440, height: 560, title: 'SPAK Figma Toolkit v0.7' });
 
-// Send current page name to UI
-figma.ui.postMessage({ type: 'page-info', name: figma.currentPage.name });
+function sendPageInfo() {
+  figma.ui.postMessage({ type: 'page-info', name: figma.currentPage.name });
+}
 
 // Send selection info to UI
 function sendSelectionInfo() {
@@ -81,9 +82,19 @@ function sendSelectionInfo() {
   const names = sel.map(n => n.name);
   figma.ui.postMessage({ type: 'selection-info', count: sel.length, names });
 }
+
+function refreshPageContext() {
+  sendPageInfo();
+  sendSelectionInfo();
+  const count = scanExistingComponents();
+  log(`Page changed: ${figma.currentPage.name} (${count} existing components on page)`, 'info');
+}
+
+sendPageInfo();
 sendSelectionInfo();
 
 figma.on('selectionchange', sendSelectionInfo);
+figma.on('currentpagechange', refreshPageContext);
 
 // Scan existing components on startup
 const existingCount = scanExistingComponents();
@@ -91,6 +102,7 @@ log(`Found ${existingCount} existing components on page`, 'info');
 
 // Constraint editing
 let pendingConstraintLayers = [];
+let pendingIconTargets = [];
 
 function getNodePath(node, rootNode) {
   const parts = [];
@@ -129,6 +141,183 @@ function findDeepestConstrainableLayers(rootNode) {
   }
 
   return collectAtDepth(rootNode, 0);
+}
+
+function getIconSourceName(node) {
+  if (node.type !== 'INSTANCE' || !node.mainComponent) return null;
+
+  const parent = node.mainComponent.parent;
+  if (parent && parent.type === 'COMPONENT_SET') {
+    return parent.name;
+  }
+
+  return node.mainComponent.name;
+}
+
+function getVariantOptions(node) {
+  const themes = new Set();
+  const states = new Set();
+  let themeKey = '';
+  let stateKey = '';
+
+  function collectMatchingProps(props) {
+    for (const key in props) {
+      const normalizedKey = key.toLowerCase();
+      if (normalizedKey === 'theme') {
+        themeKey = themeKey || key;
+        if (props[key]) themes.add(props[key]);
+      } else if (normalizedKey === 'state') {
+        stateKey = stateKey || key;
+        if (props[key]) states.add(props[key]);
+      }
+    }
+  }
+
+  if (node.type !== 'INSTANCE' || !node.mainComponent) {
+    return { themes, states, themeKey, stateKey };
+  }
+
+  const parent = node.mainComponent.parent;
+  if (parent && parent.type === 'COMPONENT_SET') {
+    for (const variant of parent.children) {
+      const props = variant.variantProperties || {};
+      collectMatchingProps(props);
+    }
+  } else {
+    const props = node.variantProperties || node.mainComponent.variantProperties || {};
+    collectMatchingProps(props);
+  }
+
+  return { themes, states, themeKey, stateKey };
+}
+
+function findEditableIconTargets(rootNode, prefix) {
+  const result = [];
+
+  function visit(node) {
+    if (node.type === 'INSTANCE') {
+      const sourceName = getIconSourceName(node);
+      if (sourceName && sourceName.startsWith(prefix)) {
+        const componentProps = node.mainComponent ? node.mainComponent.variantProperties : null;
+        const props = node.variantProperties || componentProps || {};
+        const options = getVariantOptions(node);
+        const currentTheme = options.themeKey ? (props[options.themeKey] || '') : '';
+        const currentState = options.stateKey ? (props[options.stateKey] || '') : '';
+        const displayName = sourceName.slice(prefix.length) || sourceName;
+
+        result.push({
+          node,
+          path: getNodePath(node, rootNode),
+          sourceName,
+          displayName,
+          currentTheme,
+          currentState,
+          themeKey: options.themeKey,
+          stateKey: options.stateKey,
+          availableThemes: [...options.themes],
+          availableStates: [...options.states],
+        });
+      }
+    }
+
+    if ('children' in node) {
+      for (const child of node.children) {
+        visit(child);
+      }
+    }
+  }
+
+  visit(rootNode);
+  return result;
+}
+
+function buildOptionList(targets, key, priorityList) {
+  const counts = new Map();
+
+  for (const target of targets) {
+    for (const value of target[key]) {
+      counts.set(value, (counts.get(value) || 0) + 1);
+    }
+  }
+
+  return sortByPriority([...counts.keys()], priorityList).map(value => ({
+    value,
+    enabled: counts.get(value) === targets.length,
+    count: counts.get(value),
+  }));
+}
+
+function parseExcludePrefixes(excludePrefixText) {
+  return excludePrefixText
+    .split(',')
+    .map(prefix => prefix.trim())
+    .filter(Boolean);
+}
+
+function collectIconTargetsFromSelection(includePrefix, excludePrefixText) {
+  const selection = figma.currentPage.selection;
+  const targets = [];
+  const seen = new Set();
+  const excludePrefixes = parseExcludePrefixes(excludePrefixText || '');
+
+  for (const selNode of selection) {
+    const matches = findEditableIconTargets(selNode, includePrefix);
+    for (const target of matches) {
+      if (seen.has(target.node.id)) continue;
+      if (excludePrefixes.some(prefix => target.sourceName.startsWith(prefix))) continue;
+      seen.add(target.node.id);
+      targets.push(target);
+    }
+  }
+
+  return targets;
+}
+
+function sendIconScanResult(targets) {
+  const themeOptions = buildOptionList(targets, 'availableThemes', THEME_PRIORITY);
+  const stateOptions = buildOptionList(targets, 'availableStates', STATE_PRIORITY);
+  const currentThemes = [...new Set(targets.map(target => target.currentTheme).filter(Boolean))];
+  const currentStates = [...new Set(targets.map(target => target.currentState).filter(Boolean))];
+  const currentTheme = currentThemes.length === 1 ? currentThemes[0] : '';
+  const currentState = currentStates.length === 1 ? currentStates[0] : '';
+  const themeGroupsMap = new Map();
+  const stateGroupsMap = new Map();
+
+  for (const target of targets) {
+    if (target.currentTheme) {
+      if (!themeGroupsMap.has(target.currentTheme)) {
+        themeGroupsMap.set(target.currentTheme, new Set());
+      }
+      themeGroupsMap.get(target.currentTheme).add(target.displayName);
+    }
+
+    if (!target.currentState) continue;
+    if (!stateGroupsMap.has(target.currentState)) {
+      stateGroupsMap.set(target.currentState, new Set());
+    }
+    stateGroupsMap.get(target.currentState).add(target.displayName);
+  }
+
+  const themeGroups = sortByPriority([...themeGroupsMap.keys()], THEME_PRIORITY).map(theme => ({
+    value: theme,
+    names: [...themeGroupsMap.get(theme)].sort((a, b) => a.localeCompare(b)),
+  }));
+
+  const stateGroups = sortByPriority([...stateGroupsMap.keys()], STATE_PRIORITY).map(state => ({
+    value: state,
+    names: [...stateGroupsMap.get(state)].sort((a, b) => a.localeCompare(b)),
+  }));
+
+  figma.ui.postMessage({
+    type: 'icon-props-scanned',
+    count: targets.length,
+    themeOptions,
+    stateOptions,
+    themeGroups,
+    stateGroups,
+    currentTheme,
+    currentState,
+  });
 }
 
 // Handle messages from UI
@@ -185,6 +374,119 @@ figma.ui.onmessage = async (msg) => {
 
   } else if (msg.type === 'cancel-constraints') {
     pendingConstraintLayers = [];
+  } else if (msg.type === 'scan-icon-props') {
+    const includePrefix = msg.includePrefix || '';
+    const excludePrefix = msg.excludePrefix || '';
+    if (includePrefix.trim() === '' || figma.currentPage.selection.length === 0) {
+      figma.ui.postMessage({ type: 'icon-props-scanned', count: 0, themeOptions: [], stateOptions: [] });
+      return;
+    }
+
+    sendIconScanResult(collectIconTargetsFromSelection(includePrefix, excludePrefix));
+  } else if (msg.type === 'preview-icon-props') {
+    const includePrefix = msg.includePrefix || '';
+    const excludePrefix = msg.excludePrefix || '';
+    const excludePrefixes = parseExcludePrefixes(excludePrefix);
+    if (includePrefix.trim() === '') {
+      log('Include prefix is empty', 'warn');
+      figma.ui.postMessage({ type: 'icon-props-preview', count: 0 });
+      return;
+    }
+
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      log('No layers selected', 'warn');
+      figma.ui.postMessage({ type: 'icon-props-preview', count: 0 });
+      return;
+    }
+
+    log(`\n🔍 Preview: scanning ${selection.length} selected elements for icons starting with "${includePrefix}"...`, 'info');
+    if (excludePrefixes.length > 0) {
+      log(`  Excluding icons starting with: ${excludePrefixes.join(', ')}`, 'info');
+    }
+    pendingIconTargets = collectIconTargetsFromSelection(includePrefix, excludePrefix);
+
+    if (pendingIconTargets.length === 0) {
+      log(`No matching icon instances found for include/exclude filters`, 'warn');
+      figma.ui.postMessage({ type: 'icon-props-preview', count: 0 });
+      return;
+    }
+
+    for (const target of pendingIconTargets) {
+      const themeText = target.currentTheme || '—';
+      const stateText = target.currentState || '—';
+      log(`  ✓ ${target.path} → ${target.displayName} (theme=${themeText}, state=${stateText})`, 'success');
+    }
+
+    const themeOptions = buildOptionList(pendingIconTargets, 'availableThemes', THEME_PRIORITY);
+    const stateOptions = buildOptionList(pendingIconTargets, 'availableStates', STATE_PRIORITY);
+
+    if (themeOptions.length > 0) {
+      log(`Theme options: ${themeOptions.map(opt => opt.enabled ? opt.value : `${opt.value} (partial)`).join(', ')}`, 'info');
+    } else {
+      log('Theme property not found on matched icons', 'warn');
+    }
+
+    if (stateOptions.length > 0) {
+      log(`State options: ${stateOptions.map(opt => opt.enabled ? opt.value : `${opt.value} (partial)`).join(', ')}`, 'info');
+    } else {
+      log('State property not found on matched icons', 'warn');
+    }
+
+    figma.ui.postMessage({
+      type: 'icon-props-preview',
+      count: pendingIconTargets.length,
+    });
+  } else if (msg.type === 'apply-icon-props') {
+    const total = pendingIconTargets.length;
+
+    if (total === 0) {
+      log('No icon preview is ready', 'warn');
+      figma.ui.postMessage({ type: 'icon-props-done', total: 0, errors: 0 });
+      return;
+    }
+
+    if (!msg.theme && !msg.state) {
+      log('Choose theme and/or state before applying', 'warn');
+      figma.ui.postMessage({ type: 'icon-props-done', total: 0, errors: 0, skipped: true });
+      return;
+    }
+
+    const updateParts = [];
+    if (msg.theme) updateParts.push(`theme=${msg.theme}`);
+    if (msg.state) updateParts.push(`state=${msg.state}`);
+
+    let errors = 0;
+    log(`\n▶ Applying icon props (${updateParts.join(', ')}) to ${total} icons...`, 'info');
+
+    for (let i = 0; i < total; i++) {
+      const target = pendingIconTargets[i];
+      try {
+        const updates = {};
+        if (msg.theme && target.themeKey) updates[target.themeKey] = msg.theme;
+        if (msg.state && target.stateKey) updates[target.stateKey] = msg.state;
+
+        if (Object.keys(updates).length === 0) {
+          throw new Error('No matching variant properties found');
+        }
+
+        target.node.setProperties(updates);
+        log(`  ✓ ${target.path}`, 'success');
+      } catch (err) {
+        errors++;
+        log(`  ✗ ${target.path}: ${err.message}`, 'error');
+      }
+
+      figma.ui.postMessage({ type: 'icon-props-progress', current: i + 1, total, errors });
+      if (i < total - 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+
+    pendingIconTargets = [];
+    figma.ui.postMessage({ type: 'icon-props-done', total, errors });
+  } else if (msg.type === 'cancel-icon-props') {
+    pendingIconTargets = [];
   }
 };
 

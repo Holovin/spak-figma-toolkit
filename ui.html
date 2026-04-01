@@ -140,6 +140,20 @@
       color: #333;
     }
 
+    .settings label.grow {
+      flex: 1;
+    }
+
+    .settings label.shrink {
+      flex: 0 0 auto;
+    }
+
+    .settings-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+    }
+
     .settings input[type="text"] {
       width: 60px;
       padding: 6px 8px;
@@ -147,6 +161,16 @@
       border-radius: 4px;
       font-size: 12px;
       text-align: center;
+    }
+
+    .settings label.grow input[type="text"] {
+      width: 100%;
+      text-align: left;
+    }
+
+    .settings label.shrink input[type="text"] {
+      width: 10ch;
+      text-align: left;
     }
 
     /* Separator */
@@ -337,7 +361,8 @@
       cursor: pointer;
     }
 
-    #constraintCancelBtn {
+    #constraintCancelBtn,
+    #iconCancelBtn {
       background: transparent;
       color: #999;
       border: 1px solid #ddd;
@@ -346,7 +371,8 @@
       flex: 0 0 30%;
     }
 
-    #constraintCancelBtn:hover {
+    #constraintCancelBtn:hover,
+    #iconCancelBtn:hover {
       background: #f5f5f5;
       color: #333;
     }
@@ -368,7 +394,8 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" data-tab="importer">Icon Importer</button>
-    <button class="tab-btn" data-tab="utils">Utils</button>
+    <button class="tab-btn" data-tab="constraints">Constraints</button>
+    <button class="tab-btn" data-tab="icons">Icons</button>
   </div>
 
   <!-- Tab: Icon Importer -->
@@ -414,8 +441,8 @@
     <input type="file" id="fileInput" webkitdirectory multiple accept="image/png">
   </div>
 
-  <!-- Tab: Utils -->
-  <div class="tab-content" id="tab-utils">
+  <!-- Tab: Constraints -->
+  <div class="tab-content" id="tab-constraints">
     <fieldset class="utils-section">
       <legend>Mass Constraints Edit</legend>
       <div class="settings">
@@ -447,6 +474,42 @@
     </fieldset>
   </div>
 
+  <!-- Tab: Icons -->
+  <div class="tab-content" id="tab-icons">
+    <fieldset class="utils-section">
+      <legend>Mass Icon Props Edit</legend>
+      <div class="settings">
+        <div class="settings-title">Component name:</div>
+        <div class="settings-row">
+          <label class="shrink">
+            Include:
+            <input type="text" id="iconIncludePrefix" value="Icon / ">
+          </label>
+          <label class="grow">
+            Exclude:
+            <input type="text" id="iconExcludePrefix" value="Icon / Head /, Icon / Emoji">
+          </label>
+        </div>
+        <div class="settings-row">
+          <label>Theme:
+            <select id="iconTheme" disabled>
+              <option value="">No change</option>
+            </select>
+          </label>
+          <label>State:
+            <select id="iconState" disabled>
+              <option value="">No change</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="action-row">
+        <button id="iconActionBtn">Preview</button>
+        <button id="iconCancelBtn" style="display:none">Cancel</button>
+      </div>
+    </fieldset>
+  </div>
+
   <!-- Shared bottom section -->
   <div class="bottom-section">
     <div class="progress">
@@ -471,15 +534,20 @@
     // Tab switching
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
+    let activeTab = 'importer';
 
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const target = btn.dataset.tab;
+        activeTab = target;
         tabBtns.forEach(b => b.classList.remove('active'));
         tabContents.forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tab-' + target).classList.add('active');
         resetAllState();
+        if (target === 'icons') {
+          scanIconProps();
+        }
       });
     });
 
@@ -500,7 +568,16 @@
     const constraintCancelBtn = document.getElementById('constraintCancelBtn');
     const constraintXSel = document.getElementById('constraintX');
     const constraintYSel = document.getElementById('constraintY');
-    let utilsState = 'idle'; // 'idle' | 'preview' | 'applying'
+    const iconActionBtn = document.getElementById('iconActionBtn');
+    const iconCancelBtn = document.getElementById('iconCancelBtn');
+    const iconIncludePrefixInput = document.getElementById('iconIncludePrefix');
+    const iconExcludePrefixInput = document.getElementById('iconExcludePrefix');
+    const iconThemeSel = document.getElementById('iconTheme');
+    const iconStateSel = document.getElementById('iconState');
+    let constraintsState = 'idle'; // 'idle' | 'preview' | 'applying'
+    let iconPropsState = 'idle'; // 'idle' | 'preview' | 'applying'
+    let pendingIconProps = null;
+    let currentIconScan = null;
 
     let autoScroll = true;
 
@@ -623,18 +700,22 @@
       log('Folder deselected. Select a new folder to start.', 'info');
     });
 
-    // Utils state management
-    function setUtilsState(state) {
-      utilsState = state;
+    function setTabAvailability(disabled) {
+      tabBtns.forEach(btn => {
+        btn.disabled = disabled;
+        btn.style.pointerEvents = disabled ? 'none' : '';
+        btn.style.opacity = disabled ? '0.5' : '';
+      });
+    }
+
+    // Constraints state management
+    function setConstraintsState(state) {
+      constraintsState = state;
       constraintXSel.disabled = state !== 'idle';
       constraintYSel.disabled = state !== 'idle';
 
       const isApplying = state === 'applying';
-      tabBtns.forEach(btn => {
-        btn.disabled = isApplying;
-        btn.style.pointerEvents = isApplying ? 'none' : '';
-        btn.style.opacity = isApplying ? '0.5' : '';
-      });
+      setTabAvailability(isApplying);
 
       if (state === 'idle') {
         constraintActionBtn.textContent = 'Preview';
@@ -654,6 +735,158 @@
       }
     }
 
+    function buildIconOptionLabel(option) {
+      let label = option.enabled ? option.value : `${option.value} (partial)`;
+      if (option.isCurrent) {
+        label += ' (current)';
+      }
+      return label;
+    }
+
+    function fillIconSelect(selectEl, options) {
+      selectEl.innerHTML = '';
+
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'No change';
+      selectEl.appendChild(defaultOption);
+
+      for (const option of options) {
+        const el = document.createElement('option');
+        el.value = option.value;
+        el.textContent = buildIconOptionLabel(option);
+        el.disabled = !option.enabled;
+        selectEl.appendChild(el);
+      }
+
+      selectEl.value = '';
+    }
+
+    function hasSelectableIconOptions(selectEl) {
+      return Array.from(selectEl.options).some(option => option.value !== '' && !option.disabled);
+    }
+
+    function hasAnyIconOptions(selectEl) {
+      return Array.from(selectEl.options).some(option => option.value !== '');
+    }
+
+    function hasChosenIconValue() {
+      return (
+        (!iconThemeSel.disabled && iconThemeSel.value !== '') ||
+        (!iconStateSel.disabled && iconStateSel.value !== '')
+      );
+    }
+
+    function updateIconActionAvailability() {
+      if (iconPropsState === 'applying') return;
+
+      const hasScanResults = currentIconScan && currentIconScan.count > 0;
+      const hasAnySelectableOption = hasSelectableIconOptions(iconThemeSel) || hasSelectableIconOptions(iconStateSel);
+
+      if (iconPropsState === 'idle') {
+        iconActionBtn.disabled = iconIncludePrefixInput.value.trim() === '' || !hasScanResults || !hasAnySelectableOption || !hasChosenIconValue();
+      } else if (iconPropsState === 'preview') {
+        iconActionBtn.disabled = false;
+      }
+    }
+
+    function clearIconSelects() {
+      fillIconSelect(iconThemeSel, []);
+      fillIconSelect(iconStateSel, []);
+      iconThemeSel.disabled = true;
+      iconStateSel.disabled = true;
+    }
+
+    function applyIconScanToControls(scan) {
+      currentIconScan = scan;
+
+      if (!scan || scan.count === 0) {
+        clearIconSelects();
+        updateIconActionAvailability();
+        return;
+      }
+
+      const themeOptions = (scan.themeOptions || []).map(option => ({
+        value: option.value,
+        enabled: option.enabled,
+        isCurrent: option.value === scan.currentTheme
+      }));
+      const stateOptions = (scan.stateOptions || []).map(option => ({
+        value: option.value,
+        enabled: option.enabled,
+        isCurrent: option.value === scan.currentState
+      }));
+
+      fillIconSelect(iconThemeSel, themeOptions);
+      fillIconSelect(iconStateSel, stateOptions);
+
+      iconThemeSel.disabled = !hasAnyIconOptions(iconThemeSel);
+      iconStateSel.disabled = !hasAnyIconOptions(iconStateSel);
+
+      if (scan.currentTheme && Array.from(iconThemeSel.options).some(option => option.value === scan.currentTheme && !option.disabled)) {
+        iconThemeSel.value = scan.currentTheme;
+      }
+      if (scan.currentState && Array.from(iconStateSel.options).some(option => option.value === scan.currentState && !option.disabled)) {
+        iconStateSel.value = scan.currentState;
+      }
+
+      updateIconActionAvailability();
+    }
+
+    function scanIconProps() {
+      if (activeTab !== 'icons' || iconPropsState === 'applying') return;
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'scan-icon-props',
+          includePrefix: iconIncludePrefixInput.value,
+          excludePrefix: iconExcludePrefixInput.value
+        }
+      }, '*');
+    }
+
+    function setIconPropsState(state) {
+      iconPropsState = state;
+
+      if (state === 'idle') {
+        pendingIconProps = null;
+        iconIncludePrefixInput.disabled = false;
+        iconExcludePrefixInput.disabled = false;
+        iconActionBtn.textContent = 'Preview';
+        iconActionBtn.className = '';
+        iconCancelBtn.style.display = 'none';
+        setTabAvailability(false);
+        setProgress(0);
+        if (!currentIconScan || currentIconScan.count === 0) {
+          clearIconSelects();
+        } else {
+          iconThemeSel.disabled = !hasAnyIconOptions(iconThemeSel);
+          iconStateSel.disabled = !hasAnyIconOptions(iconStateSel);
+        }
+        updateIconActionAvailability();
+      } else if (state === 'preview') {
+        iconIncludePrefixInput.disabled = true;
+        iconExcludePrefixInput.disabled = true;
+        iconActionBtn.textContent = `Apply to ${pendingIconProps.count} icons`;
+        iconActionBtn.className = 'confirm';
+        iconCancelBtn.style.display = '';
+        iconThemeSel.disabled = true;
+        iconStateSel.disabled = true;
+        setTabAvailability(false);
+        updateIconActionAvailability();
+      } else if (state === 'applying') {
+        iconIncludePrefixInput.disabled = true;
+        iconExcludePrefixInput.disabled = true;
+        iconThemeSel.disabled = true;
+        iconStateSel.disabled = true;
+        iconActionBtn.textContent = 'In Progress...';
+        iconActionBtn.className = '';
+        iconActionBtn.disabled = true;
+        iconCancelBtn.style.display = 'none';
+        setTabAvailability(true);
+      }
+    }
+
     function resetAllState() {
       // Reset importer
       pendingImport = null;
@@ -661,33 +894,28 @@
       setAppState('idle');
       fileInput.value = '';
 
-      // Reset utils
-      utilsState = 'idle';
-      constraintActionBtn.textContent = 'Preview';
-      constraintActionBtn.className = '';
-      constraintActionBtn.disabled = false;
-      constraintCancelBtn.style.display = 'none';
-      constraintXSel.disabled = false;
-      constraintYSel.disabled = false;
+      // Reset constraints
+      setConstraintsState('idle');
       constraintXSel.value = 'MIN';
       constraintYSel.value = 'MIN';
       parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
 
+      // Reset icon props
+      currentIconScan = null;
+      setIconPropsState('idle');
+      parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
+
       // Unblock tabs
-      tabBtns.forEach(btn => {
-        btn.disabled = false;
-        btn.style.pointerEvents = '';
-        btn.style.opacity = '';
-      });
+      setTabAvailability(false);
     }
 
     constraintActionBtn.addEventListener('click', () => {
-      if (utilsState === 'idle') {
+      if (constraintsState === 'idle') {
         parent.postMessage({
           pluginMessage: { type: 'preview-constraints' }
         }, '*');
-      } else if (utilsState === 'preview') {
-        setUtilsState('applying');
+      } else if (constraintsState === 'preview') {
+        setConstraintsState('applying');
         parent.postMessage({
           pluginMessage: {
             type: 'apply-constraints',
@@ -699,10 +927,68 @@
     });
 
     constraintCancelBtn.addEventListener('click', () => {
-      setUtilsState('idle');
+      setConstraintsState('idle');
       parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
       log('Cancelled', 'info');
     });
+
+    iconIncludePrefixInput.addEventListener('input', () => {
+      if (iconPropsState === 'idle') {
+        scanIconProps();
+      }
+    });
+
+    iconExcludePrefixInput.addEventListener('input', () => {
+      if (iconPropsState === 'idle') {
+        scanIconProps();
+      }
+    });
+
+    iconThemeSel.addEventListener('change', updateIconActionAvailability);
+    iconStateSel.addEventListener('change', updateIconActionAvailability);
+
+    iconActionBtn.addEventListener('click', () => {
+      if (iconPropsState === 'idle') {
+        if (!hasChosenIconValue()) {
+          log('Choose theme and/or state before preview', 'warn');
+          return;
+        }
+
+        parent.postMessage({
+          pluginMessage: {
+            type: 'preview-icon-props',
+            includePrefix: iconIncludePrefixInput.value,
+            excludePrefix: iconExcludePrefixInput.value
+          }
+        }, '*');
+      } else if (iconPropsState === 'preview') {
+        const theme = iconThemeSel.value;
+        const state = iconStateSel.value;
+
+        if (!theme && !state) {
+          log('Choose theme and/or state before applying', 'warn');
+          return;
+        }
+
+        setIconPropsState('applying');
+        parent.postMessage({
+          pluginMessage: {
+            type: 'apply-icon-props',
+            theme,
+            state
+          }
+        }, '*');
+      }
+    });
+
+    iconCancelBtn.addEventListener('click', () => {
+      setIconPropsState('idle');
+      parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
+      log('Cancelled', 'info');
+    });
+
+    setConstraintsState('idle');
+    setIconPropsState('idle');
 
     // Format time in 24h format
     function formatTime() {
@@ -1044,7 +1330,10 @@
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(new Uint8Array(reader.result));
-        reader.onerror = () => reject(new Error(`FileReader error: ${reader.error?.message || 'unknown'}`));
+        reader.onerror = () => {
+          const message = reader.error && reader.error.message ? reader.error.message : 'unknown';
+          reject(new Error(`FileReader error: ${message}`));
+        };
         reader.readAsArrayBuffer(file);
       });
     }
@@ -1090,6 +1379,15 @@
         } else {
           selectionInfoEl.textContent = `${msg.count} (${msg.names.join(', ')})`;
         }
+
+        if (activeTab === 'icons' && iconPropsState !== 'applying') {
+          if (iconPropsState === 'preview') {
+            setIconPropsState('idle');
+            parent.postMessage({ pluginMessage: { type: 'cancel-icon-props' } }, '*');
+            log('Selection changed. Icon preview reset.', 'info');
+          }
+          scanIconProps();
+        }
       } else if (msg.type === 'log') {
         log(msg.message, msg.level || '');
       } else if (msg.type === 'rescan-done') {
@@ -1109,14 +1407,14 @@
       } else if (msg.type === 'constraints-preview') {
         if (msg.count === 0) {
           log('No constrainable layers found at deepest level', 'warn');
-          setUtilsState('idle');
+          setConstraintsState('idle');
         } else {
           for (const path of msg.paths) {
             log(path, 'info');
           }
           log(`\nFound ${msg.count} layers to modify`, 'info');
           constraintActionBtn.textContent = `Apply to ${msg.count} layers`;
-          setUtilsState('preview');
+          setConstraintsState('preview');
         }
       } else if (msg.type === 'constraint-progress') {
         setProgress((msg.current / msg.total) * 100);
@@ -1128,7 +1426,75 @@
           log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
         }
         setStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
-        setUtilsState('idle');
+        setConstraintsState('idle');
+      } else if (msg.type === 'icon-props-scanned') {
+        applyIconScanToControls({
+          count: msg.count,
+          themeOptions: msg.themeOptions || [],
+          stateOptions: msg.stateOptions || [],
+          currentTheme: msg.currentTheme || '',
+          currentState: msg.currentState || ''
+        });
+
+        if (iconPropsState === 'idle' && msg.count > 0) {
+          const availableThemes = (msg.themeOptions || []).map(option => option.value);
+          const availableStates = (msg.stateOptions || []).map(option => option.value);
+
+          log(`Icon scan: ${msg.count} matches`, 'info');
+          log(`Available themes: ${availableThemes.length ? availableThemes.join(', ') : 'none'}`, availableThemes.length ? 'info' : 'warn');
+          log('Selected themes:', 'info');
+          for (const group of (msg.themeGroups || [])) {
+            log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
+          }
+          log(`Available states: ${availableStates.length ? availableStates.join(', ') : 'none'}`, availableStates.length ? 'info' : 'warn');
+          log('Selected states:', 'info');
+          for (const group of (msg.stateGroups || [])) {
+            log(`-- ${group.value}: ${group.names.join(', ')}`, 'info');
+          }
+        }
+
+        if (iconPropsState === 'idle') {
+          if (msg.count > 0) {
+            const enabledThemeCount = (msg.themeOptions || []).filter(option => option.enabled).length;
+            const enabledStateCount = (msg.stateOptions || []).filter(option => option.enabled).length;
+            if (enabledThemeCount === 0 && enabledStateCount === 0) {
+              setStats(`Found ${msg.count} matching icon instances, but no common theme/state values`);
+            } else {
+              setStats(`Found ${msg.count} matching icon instances`);
+            }
+          } else if (iconIncludePrefixInput.value.trim() === '') {
+            setStats('Include prefix is empty');
+          } else {
+            setStats('No matching icon instances found');
+          }
+        }
+      } else if (msg.type === 'icon-props-preview') {
+        if (msg.count === 0) {
+          setStats('No matching icon instances found');
+          setIconPropsState('idle');
+        } else {
+          pendingIconProps = {
+            count: msg.count
+          };
+          setStats(`Found ${msg.count} matching icon instances`);
+          setIconPropsState('preview');
+        }
+      } else if (msg.type === 'icon-props-progress') {
+        setProgress((msg.current / msg.total) * 100);
+        setStats(`Processed: ${msg.current}/${msg.total} (errors: ${msg.errors})`);
+      } else if (msg.type === 'icon-props-done') {
+        if (msg.skipped) {
+          setStats('Choose theme and/or state before applying');
+          setIconPropsState('preview');
+        } else {
+          if (msg.errors > 0) {
+            log(`\n⚠️ Completed with errors. Processed: ${msg.total}, errors: ${msg.errors}`, 'warn');
+          } else {
+            log(`\n✅ Done! Processed: ${msg.total}, errors: ${msg.errors}`, 'success');
+          }
+          setStats(`Processed: ${msg.total}/${msg.total} (errors: ${msg.errors})`);
+          setIconPropsState('idle');
+        }
       }
     };
   </script>

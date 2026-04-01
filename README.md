@@ -2,7 +2,7 @@
 <img width="929" height="634" alt="image" src="https://github.com/user-attachments/assets/93a8e65c-5013-4687-8488-23973c8b4626" />
 
 
-A Figma plugin with tools for bulk operations: icon importing and mass constraint editing.
+A Figma plugin with tools for bulk operations: icon importing, mass constraint editing, and bulk icon variant updates.
 
 ### INSTALLATION
 1. Download the project as a ZIP archive and extract it to a folder on your computer.
@@ -49,11 +49,69 @@ Icons that already exist on the page are skipped. Missing or corrupted files are
 
 ---
 
-## Utils
+## Constraints
 
 ### Mass Constraints Edit
 
 Bulk edit constraints (X and Y) on the deepest-level children of selected elements.
+
+---
+
+## Icons
+
+### Mass Icon Props Edit
+
+Bulk edit icon variant properties (`theme` and `state`) on nested icon instances inside the current selection.
+
+### How it works
+
+- The plugin scans the current selection and all descendants.
+- Only instances whose source component name starts with the `Include` prefix are considered.
+- Instances whose source component name starts with any `Exclude` prefix are skipped.
+- `Exclude` accepts multiple comma-separated prefixes.
+
+Default filters:
+
+```text
+Include: Icon /
+Exclude: Icon / Head /, Icon / Emoji
+```
+
+### Selection behavior
+
+- Scan is automatic while the `Icons` tab is open.
+- The status line shows how many matching icon instances were found.
+- `Theme` and `State` selects are filled from the matched icons.
+- Values available for all matched icons are selectable.
+- Values available only for some matched icons are shown as `(partial)` and remain disabled.
+- If all matched icons currently use the same `Theme` or `State`, that value is auto-selected and marked as `(current)`.
+- Names shown in scan logs are trimmed by the `Include` prefix. For example, `Icon / Acl / All16` is shown as `Acl / All16`.
+
+### Scan logs
+
+The shared console logs scan results in this format:
+
+```text
+Available themes: light, dark
+Selected themes:
+-- dark: Acl / All16, Search / 16
+
+Available states: default, black
+Selected states:
+-- default: Acl / All16
+-- black: Search / 16
+```
+
+### Apply flow
+
+1. Select one or more containers, components, slots, or frames in Figma.
+2. Open the `Icons` tab.
+3. Adjust `Include` / `Exclude` filters if needed.
+4. Choose a target `Theme`, `State`, or both.
+5. Click `Preview`.
+6. Click `Apply` to update all previewed icon instances, or `Cancel` to discard the preview.
+
+All important scan, preview, and apply actions are written to the shared console.
 
 ---
 
