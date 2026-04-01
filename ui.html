@@ -545,6 +545,10 @@
         btn.classList.add('active');
         document.getElementById('tab-' + target).classList.add('active');
         resetAllState();
+        updateDefaultStatsForActiveTab();
+        if (target === 'constraints') {
+          scanConstraints();
+        }
         if (target === 'icons') {
           scanIconProps();
         }
@@ -568,15 +572,27 @@
     const constraintCancelBtn = document.getElementById('constraintCancelBtn');
     const constraintXSel = document.getElementById('constraintX');
     const constraintYSel = document.getElementById('constraintY');
+    const constraintOptionLabels = {
+      x: {},
+      y: {}
+    };
+    Array.from(constraintXSel.options).forEach(option => {
+      constraintOptionLabels.x[option.value] = option.textContent;
+    });
+    Array.from(constraintYSel.options).forEach(option => {
+      constraintOptionLabels.y[option.value] = option.textContent;
+    });
     const iconActionBtn = document.getElementById('iconActionBtn');
     const iconCancelBtn = document.getElementById('iconCancelBtn');
     const iconIncludePrefixInput = document.getElementById('iconIncludePrefix');
     const iconExcludePrefixInput = document.getElementById('iconExcludePrefix');
     const iconThemeSel = document.getElementById('iconTheme');
     const iconStateSel = document.getElementById('iconState');
+    let currentSelectionCount = 0;
     let constraintsState = 'idle'; // 'idle' | 'preview' | 'applying'
     let iconPropsState = 'idle'; // 'idle' | 'preview' | 'applying'
     let pendingIconProps = null;
+    let currentConstraintScan = null;
     let currentIconScan = null;
 
     let autoScroll = true;
@@ -708,6 +724,46 @@
       });
     }
 
+    function updateDefaultStatsForActiveTab() {
+      if (activeTab === 'importer') {
+        setStats('Choose a folder with icons');
+        return;
+      }
+
+      if (activeTab === 'constraints') {
+        if (currentSelectionCount === 0) {
+          setStats('Select layers to scan constraints');
+        } else if (currentConstraintScan && currentConstraintScan.count > 0) {
+          setStats(`Found ${currentConstraintScan.count} constrainable layers`);
+        } else if (currentConstraintScan) {
+          setStats('No constrainable layers found');
+        } else {
+          setStats('Scanning selection for constrainable layers...');
+        }
+        return;
+      }
+
+      if (activeTab === 'icons') {
+        if (currentSelectionCount === 0) {
+          setStats('Select layers to scan icons');
+        } else if (iconIncludePrefixInput.value.trim() === '') {
+          setStats('Include prefix is empty');
+        } else if (currentIconScan && currentIconScan.count > 0) {
+          const enabledThemeCount = (currentIconScan.themeOptions || []).filter(option => option.enabled).length;
+          const enabledStateCount = (currentIconScan.stateOptions || []).filter(option => option.enabled).length;
+          if (enabledThemeCount === 0 && enabledStateCount === 0) {
+            setStats(`Found ${currentIconScan.count} matching icon instances, but no common theme/state values`);
+          } else {
+            setStats(`Found ${currentIconScan.count} matching icon instances`);
+          }
+        } else if (currentIconScan) {
+          setStats('No matching icon instances found');
+        } else {
+          setStats('Scanning selection for matching icon instances...');
+        }
+      }
+    }
+
     // Constraints state management
     function setConstraintsState(state) {
       constraintsState = state;
@@ -720,9 +776,10 @@
       if (state === 'idle') {
         constraintActionBtn.textContent = 'Preview';
         constraintActionBtn.className = '';
-        constraintActionBtn.disabled = false;
         constraintCancelBtn.style.display = 'none';
         setProgress(0);
+        updateConstraintActionAvailability();
+        updateDefaultStatsForActiveTab();
       } else if (state === 'preview') {
         constraintActionBtn.className = 'confirm';
         constraintActionBtn.disabled = false;
@@ -732,6 +789,50 @@
         constraintActionBtn.className = '';
         constraintActionBtn.disabled = true;
         constraintCancelBtn.style.display = 'none';
+      }
+    }
+
+    function updateConstraintSelectLabel(selectEl, labels, currentValue) {
+      Array.from(selectEl.options).forEach(option => {
+        const baseLabel = labels[option.value] || option.textContent.replace(/ \(current\)$/, '');
+        option.textContent = currentValue && option.value === currentValue ? `${baseLabel} (current)` : baseLabel;
+      });
+    }
+
+    function applyConstraintScanToControls(scan) {
+      currentConstraintScan = scan;
+      updateConstraintSelectLabel(constraintXSel, constraintOptionLabels.x, scan && scan.currentX ? scan.currentX : '');
+      updateConstraintSelectLabel(constraintYSel, constraintOptionLabels.y, scan && scan.currentY ? scan.currentY : '');
+
+      if (scan && scan.currentX && Array.from(constraintXSel.options).some(option => option.value === scan.currentX)) {
+        constraintXSel.value = scan.currentX;
+      }
+
+      if (scan && scan.currentY && Array.from(constraintYSel.options).some(option => option.value === scan.currentY)) {
+        constraintYSel.value = scan.currentY;
+      }
+
+      updateConstraintActionAvailability();
+    }
+
+    function updateConstraintActionAvailability() {
+      if (constraintsState === 'applying') return;
+
+      if (constraintsState === 'idle') {
+        if (!currentConstraintScan || currentConstraintScan.count === 0) {
+          constraintActionBtn.disabled = true;
+          return;
+        }
+
+        const isExactCurrentSelection =
+          !!currentConstraintScan.currentX &&
+          !!currentConstraintScan.currentY &&
+          constraintXSel.value === currentConstraintScan.currentX &&
+          constraintYSel.value === currentConstraintScan.currentY;
+
+        constraintActionBtn.disabled = isExactCurrentSelection;
+      } else if (constraintsState === 'preview') {
+        constraintActionBtn.disabled = false;
       }
     }
 
@@ -836,11 +937,32 @@
     function scanIconProps() {
       if (activeTab !== 'icons' || iconPropsState === 'applying') return;
 
+      if (iconPropsState === 'idle') {
+        currentIconScan = null;
+        clearIconSelects();
+        updateDefaultStatsForActiveTab();
+      }
+
       parent.postMessage({
         pluginMessage: {
           type: 'scan-icon-props',
           includePrefix: iconIncludePrefixInput.value,
           excludePrefix: iconExcludePrefixInput.value
+        }
+      }, '*');
+    }
+
+    function scanConstraints() {
+      if (activeTab !== 'constraints' || constraintsState === 'applying') return;
+
+      if (constraintsState === 'idle') {
+        applyConstraintScanToControls(null);
+        updateDefaultStatsForActiveTab();
+      }
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'scan-constraints'
         }
       }, '*');
     }
@@ -895,9 +1017,11 @@
       fileInput.value = '';
 
       // Reset constraints
-      setConstraintsState('idle');
+      currentConstraintScan = null;
       constraintXSel.value = 'MIN';
       constraintYSel.value = 'MIN';
+      applyConstraintScanToControls(null);
+      setConstraintsState('idle');
       parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
 
       // Reset icon props
@@ -931,6 +1055,9 @@
       parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
       log('Cancelled', 'info');
     });
+
+    constraintXSel.addEventListener('change', updateConstraintActionAvailability);
+    constraintYSel.addEventListener('change', updateConstraintActionAvailability);
 
     iconIncludePrefixInput.addEventListener('input', () => {
       if (iconPropsState === 'idle') {
@@ -989,6 +1116,7 @@
 
     setConstraintsState('idle');
     setIconPropsState('idle');
+    updateDefaultStatsForActiveTab();
 
     // Format time in 24h format
     function formatTime() {
@@ -1374,10 +1502,20 @@
       if (msg.type === 'page-info') {
         document.getElementById('pageName').textContent = msg.name;
       } else if (msg.type === 'selection-info') {
+        currentSelectionCount = msg.count;
         if (msg.count === 0) {
           selectionInfoEl.textContent = '0';
         } else {
           selectionInfoEl.textContent = `${msg.count} (${msg.names.join(', ')})`;
+        }
+
+        if (activeTab === 'constraints' && constraintsState !== 'applying') {
+          if (constraintsState === 'preview') {
+            setConstraintsState('idle');
+            parent.postMessage({ pluginMessage: { type: 'cancel-constraints' } }, '*');
+            log('Selection changed. Constraints preview reset.', 'info');
+          }
+          scanConstraints();
         }
 
         if (activeTab === 'icons' && iconPropsState !== 'applying') {
@@ -1404,11 +1542,25 @@
           });
           componentCreatedResolve = null;
         }
+      } else if (msg.type === 'constraints-scanned') {
+        applyConstraintScanToControls({
+          count: msg.count,
+          currentX: msg.currentX || '',
+          currentY: msg.currentY || ''
+        });
+        if (constraintsState === 'idle') {
+          updateDefaultStatsForActiveTab();
+        }
       } else if (msg.type === 'constraints-preview') {
         if (msg.count === 0) {
-          log('No constrainable layers found at deepest level', 'warn');
+          applyConstraintScanToControls({ count: 0, currentX: '', currentY: '' });
           setConstraintsState('idle');
         } else {
+          currentConstraintScan = {
+            count: msg.count,
+            currentX: currentConstraintScan && currentConstraintScan.currentX ? currentConstraintScan.currentX : '',
+            currentY: currentConstraintScan && currentConstraintScan.currentY ? currentConstraintScan.currentY : ''
+          };
           for (const path of msg.paths) {
             log(path, 'info');
           }
@@ -1454,23 +1606,10 @@
         }
 
         if (iconPropsState === 'idle') {
-          if (msg.count > 0) {
-            const enabledThemeCount = (msg.themeOptions || []).filter(option => option.enabled).length;
-            const enabledStateCount = (msg.stateOptions || []).filter(option => option.enabled).length;
-            if (enabledThemeCount === 0 && enabledStateCount === 0) {
-              setStats(`Found ${msg.count} matching icon instances, but no common theme/state values`);
-            } else {
-              setStats(`Found ${msg.count} matching icon instances`);
-            }
-          } else if (iconIncludePrefixInput.value.trim() === '') {
-            setStats('Include prefix is empty');
-          } else {
-            setStats('No matching icon instances found');
-          }
+          updateDefaultStatsForActiveTab();
         }
       } else if (msg.type === 'icon-props-preview') {
         if (msg.count === 0) {
-          setStats('No matching icon instances found');
           setIconPropsState('idle');
         } else {
           pendingIconProps = {

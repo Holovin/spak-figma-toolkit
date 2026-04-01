@@ -143,6 +143,44 @@ function findDeepestConstrainableLayers(rootNode) {
   return collectAtDepth(rootNode, 0);
 }
 
+function collectConstraintTargetsFromSelection() {
+  const selection = figma.currentPage.selection;
+  const targets = [];
+
+  for (const selNode of selection) {
+    const layers = findDeepestConstrainableLayers(selNode);
+    for (const layer of layers) {
+      targets.push({ node: layer, path: getNodePath(layer, selNode) });
+    }
+  }
+
+  return targets;
+}
+
+function getCommonConstraintValues(targets) {
+  if (!targets.length) {
+    return { currentX: '', currentY: '' };
+  }
+
+  const firstConstraints = targets[0].node.constraints || {};
+  const firstX = firstConstraints.horizontal || '';
+  const firstY = firstConstraints.vertical || '';
+  let sameX = !!firstX;
+  let sameY = !!firstY;
+
+  for (let i = 1; i < targets.length; i++) {
+    const constraints = targets[i].node.constraints || {};
+    if (constraints.horizontal !== firstX) sameX = false;
+    if (constraints.vertical !== firstY) sameY = false;
+    if (!sameX && !sameY) break;
+  }
+
+  return {
+    currentX: sameX ? firstX : '',
+    currentY: sameY ? firstY : '',
+  };
+}
+
 function getIconSourceName(node) {
   if (node.type !== 'INSTANCE' || !node.mainComponent) return null;
 
@@ -328,6 +366,15 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.postMessage({ type: 'rescan-done' });
   } else if (msg.type === 'create-icon') {
     await createIconComponent(msg);
+  } else if (msg.type === 'scan-constraints') {
+    const targets = figma.currentPage.selection.length === 0 ? [] : collectConstraintTargetsFromSelection();
+    const currentValues = getCommonConstraintValues(targets);
+    figma.ui.postMessage({
+      type: 'constraints-scanned',
+      count: targets.length,
+      currentX: currentValues.currentX,
+      currentY: currentValues.currentY,
+    });
   } else if (msg.type === 'preview-constraints') {
     const selection = figma.currentPage.selection;
     if (selection.length === 0) {
@@ -336,13 +383,7 @@ figma.ui.onmessage = async (msg) => {
       return;
     }
 
-    pendingConstraintLayers = [];
-    for (const selNode of selection) {
-      const layers = findDeepestConstrainableLayers(selNode);
-      for (const layer of layers) {
-        pendingConstraintLayers.push({ node: layer, path: getNodePath(layer, selNode) });
-      }
-    }
+    pendingConstraintLayers = collectConstraintTargetsFromSelection();
 
     const paths = pendingConstraintLayers.map(l => l.path);
     log(`\n🔍 Preview: scanning ${selection.length} selected elements...`, 'info');
